@@ -19,9 +19,13 @@
   - 使っているOpenAIキーは `JOE/HP-wordpress/backend/.env` の `OPENAI_API_KEY` を流用
     （`geotool/.env.save` にも同じ鍵）。`beds24-ai-reply/.env` のOpenAIキーは**期限切れ**で、
     あちらのAI返信が止まっている可能性がある（別案件・未調査）。
-  - **2026-11-23: このキーの値をセッションのログに表示してしまった。** 失効と再発行を
-    推奨する（利用者の作業）。差し替え先は3か所: `BLOG/ycss/.env`、
-    `JOE/HP-wordpress/backend/.env`、`JOE/geotool/.env.save`。
+  - **2026-11-23: このキーの値をセッションのログに表示してしまった**（`.env` 書き込み後の
+    確認でマスク処理が効かなかった）。失効と再発行を提案したが、**利用者の判断で
+    継続使用**となった（2026-11-23）。再提案しない。
+    - 残るリスクは、記録が外部に渡った場合に残高が使われること。**見張るなら
+      https://platform.openai.com/usage の請求額**。急増していたら失効させる。
+    - 失効させる場合の差し替え先は3か所（同じ鍵を共用している）:
+      `BLOG/ycss/.env`、`JOE/HP-wordpress/backend/.env`、`JOE/geotool/.env.save`。
 - **GitHub Actions は検証専用にした（コミットもpushもしない）。** publisher はVPSの1本だけ。
   2026-11-23にpush時のActionsがコミットしてVPSのクローンと食い違ったため、
   `publish.yml` からコミット処理を外し、権限も `contents: read` に落とした。
