@@ -8,6 +8,9 @@ services:
     build:
       context: .
       dockerfile: automation/Dockerfile
+      args:
+        APP_UID: "${HOST_UID:-1000}"
+        APP_GID: "${HOST_GID:-1000}"
     image: blue-court-automation
     # Write generated files as the host user, not root: root-owned articles in
     # the working tree block the next local edit and the next git operation.
@@ -17,17 +20,24 @@ services:
         required: false
     environment:
       SITE_ROOT: /app
-      HOME: /tmp
+      HOME: /home/app
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
+      # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
+      GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
     volumes:
       - ./:/app
       - ./secrets:/secrets:ro
+      # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
+      - ${SSH_DIR:-~/.ssh}:/ssh:ro
     command: ["python", "-m", "automation.app.run_once"]
 
   scheduler:
     build:
       context: .
       dockerfile: automation/Dockerfile
+      args:
+        APP_UID: "${HOST_UID:-1000}"
+        APP_GID: "${HOST_GID:-1000}"
     image: blue-court-automation
     restart: unless-stopped
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
@@ -36,11 +46,15 @@ services:
         required: false
     environment:
       SITE_ROOT: /app
-      HOME: /tmp
+      HOME: /home/app
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
+      # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
+      GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
     volumes:
       - ./:/app
       - ./secrets:/secrets:ro
+      # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
+      - ${SSH_DIR:-~/.ssh}:/ssh:ro
     command: ["python", "-m", "automation.app.scheduler"]
 
   preview:

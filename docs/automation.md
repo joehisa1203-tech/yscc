@@ -32,7 +32,7 @@
 ```bash
 cp .env.example .env     # 中身の記入は利用者本人が行う
 docker compose run --rm publish        # 今日の記事を1回だけ生成
-docker compose up -d scheduler         # 毎日 PUBLISH_AT(JST) に生成し続ける
+docker compose up -d scheduler         # 毎日 PUBLISH_AT(JST) に生成し続ける（常時起動）
 docker compose up -d preview           # http://localhost:8099/ で表示確認
 docker compose logs -f scheduler       # 動いているかの確認
 docker compose down                    # 停止
@@ -84,12 +84,26 @@ docker compose run --rm --entrypoint python publish -c "from automation.app impo
 ## git push を有効にする場合
 
 `GIT_PUSH=1` にすると、コンテナが `data/ blog/ sitemap.xml assets/` をコミットして push します。
-push には資格情報がコンテナ内に必要です。どちらかを選んでください（**値はドキュメントに書かない**）。
+push にはSSH鍵がコンテナ内から見える必要があります。`docker-compose.yml` は
+`SSH_DIR`（既定 `~/.ssh`）を `/ssh` として**読み取り専用**でマウントし、`SSH_KEY_FILE` で
+使う鍵を選びます（このVPSでは `id_ed25519_github`）。鍵はGitHubに登録済みのものを指定してください。
 
-- SSH鍵を読み取り専用でマウントし、リモートをSSH形式にする
-  （`~/.ssh:/home/user/.ssh:ro` 相当を `docker-compose.yml` に足す）。
-- GitHubのPersonal Access Tokenを使う場合は、ホスト側のgit credential helperにだけ保存し、
-  `~/.git-credentials` を読み取り専用でマウントする。
+```
+GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE} -o IdentitiesOnly=yes
+                 -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
+```
+
+`IdentitiesOnly` で鍵を1本に限定し、`StrictHostKeyChecking=yes` でホスト鍵を既知のものだけに
+限っています。接続確認は次のとおり（鍵の中身は表示されません）。
+
+```bash
+docker compose run --rm --entrypoint sh publish -c 'ssh -i /ssh/$SSH_KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -T git@github.com'
+```
+
+**コンテナ内に実行UIDのユーザーが必要です。** `ssh` は `getpwuid()` でユーザーを引くため、
+UIDが `/etc/passwd` に無いと `No user exists for uid 1000` でpushが失敗します。そのため
+Dockerfile が `APP_UID` / `APP_GID`（composeが `HOST_UID` / `HOST_GID` から渡す）で
+同じUIDのユーザーを作っています。
 
 push先は remote `origin`（`joehisa1203-tech/yscc`）です。旧 `softrenzu/ycss` へは push しません
 （push URLを無効化済み）。**Renderは旧リポジトリを見ているため、pushしても公開サイトは更新されません。**

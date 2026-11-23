@@ -10,6 +10,24 @@
   `joehisa1203-tech/yscc` へ切り替える（利用者の作業。残課題に記載）。
 - 両リポジトリで毎日投稿のActionsが動くため、記事の履歴は今後分岐する。片方へ寄せる予定はない。
 
+## 稼働状態（2026-11-23 時点）
+
+- **このVPS（`x210-131-216-216`）で scheduler を常時起動済み**。
+  `ycss-scheduler-1` / `restart: unless-stopped`（VPS再起動後も復帰）。次回実行は毎日 10:10 JST。
+- `.env` 作成済み（git管理外）。`GIT_PUSH=1`、push先は remote `origin`（`joehisa1203-tech/yscc`）。
+- コンテナからのSSH認証とpushは実機確認済み（`ssh -T git@github.com` で
+  `Hi joehisa1203-tech!`、`git push --dry-run` が通る）。
+  使う鍵はホストに前からある `~/.ssh/id_ed25519_github`（GitHub登録済み）。
+  `~/.ssh` を `/ssh` として読み取り専用でマウントし、`SSH_KEY_FILE` で鍵を選ぶ。
+- **写真はまだ付かない**（`GDRIVE_FOLDER_ID` 未設定）。設定した翌日の記事から付く。
+
+状態の確認:
+
+```bash
+docker compose ps scheduler
+docker compose logs --tail=20 scheduler
+```
+
 ## 動いているもの
 
 - 公開サイト: https://blue-court-yscc.onrender.com/ （Render。接続先は旧 `softrenzu/ycss`）
