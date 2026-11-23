@@ -4,7 +4,7 @@
 
 公開サイト: https://blue-court-yscc.onrender.com/
 
-GitHub: https://github.com/softrenzu/ycss
+GitHub: https://github.com/joehisa1203-tech/yscc （push先はここだけ。`softrenzu/ycss` へは push しない）
 
 公式情報:
 
@@ -24,10 +24,11 @@ GitHub: https://github.com/softrenzu/ycss
 - **GitHub Actions `.github/workflows/publish.yml`** … 毎日 10:10 JST頃。写真なしのテキスト記事。
   スケジュール実行は混雑時に遅延することがあります。
 
-**この2経路を長く併走させないでください。** どちらに寄せるかは未決で、判断材料は `docs/status.md` の残課題にあります。
+公開できているかは、実行ログ（Actionsの履歴、または `docker compose logs scheduler`）で確認してください。
 
-Renderはmainへの変更で自動デプロイします。公開できているかは、実行ログ（Actionsの履歴、または
-`docker compose logs scheduler`）とRenderのデプロイ履歴の両方で確認してください。
+**Renderの自動デプロイは現在このリポジトリにつながっていません。** Renderが見ているのは
+`softrenzu/ycss` で、そちらへは push しない方針です。公開サイトへ反映するには Render の
+接続先を `joehisa1203-tech/yscc` に切り替える必要があります（利用者の作業）。詳細は `docs/status.md`。
 
 記事内容は、サッカー観戦の魅力・チケットの買い方・スタジアムへの行き方・JFLの見どころ・クラブへの関心を高めるテーマを24本でローテーション。架空の試合結果、観客数、チケット残席、選手のコメントや募集状況は作りません。ニュース記事の自動要約や無断転載も行いません。
 

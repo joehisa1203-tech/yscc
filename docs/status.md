@@ -1,13 +1,24 @@
 # 現在地（2026-11-23 更新）
 
+## リポジトリとpush先（2026-11-23 決定）
+
+- **push先は `joehisa1203-tech/yscc` だけ**（remote `origin`、SSH）。
+- 旧 `softrenzu/ycss` は remote `softrenzu` として参照用に残し、**push URLを無効化**してある
+  （`git push softrenzu` はエラーで止まる）。取り込みが必要になったら `git fetch softrenzu` で読むだけ。
+- **公開サイト https://blue-court-yscc.onrender.com/ は旧リポジトリにつながったまま。**
+  つまり、このリポジトリへpushしてもサイトは更新されない。反映するにはRenderの接続先を
+  `joehisa1203-tech/yscc` へ切り替える（利用者の作業。残課題に記載）。
+- 両リポジトリで毎日投稿のActionsが動くため、記事の履歴は今後分岐する。片方へ寄せる予定はない。
+
 ## 動いているもの
 
-- 公開サイト: https://blue-court-yscc.onrender.com/ （Render、mainへのpushで自動デプロイ）
+- 公開サイト: https://blue-court-yscc.onrender.com/ （Render。接続先は旧 `softrenzu/ycss`）
 - 毎日ブログ: `scripts/daily_blog.py` が JST の日付ごとに記事を1本生成。同じ日の二重投稿はしない。
-- 公開経路（現在2つ）:
+- 記事の生成経路:
   1. **GitHub Actions** `.github/workflows/publish.yml` … 毎日 10:10 JST 頃。写真なしのテキスト記事。
+     push先の `joehisa1203-tech/yscc` でも動く。
   2. **Dockerアプリ** `automation/` … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`。
-     Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。
+     Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。pushは `origin` へ。
 - 自動テスト: `automation/tests/`（14件）。Driveの認証情報なしで動く。
   2026-11-23時点で、EXIF除去とヒーロー画像のパス検証をわざと壊して落ちることを確認済み。
 
@@ -29,15 +40,19 @@
 2. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
 3. **push資格情報の用意**（`GIT_PUSH=1` で運用する場合）。SSH鍵かcredential helperのマウント。
 4. **Dockerを常時動かすホストの決定。** scheduler は動かし続けないと毎日公開しない。
+5. **Renderの接続先切り替え（公開サイトに反映したい場合）。** 現在Renderは旧 `softrenzu/ycss` を
+   見ているため、このリポジトリの変更はサイトに出ない。切り替える場合は、`scripts/daily_blog.py` の
+   `BASE`（現在 `https://blue-court-yscc.onrender.com/`）とcanonical・og:url・sitemapのURLも
+   新しい公開URLに合わせる必要がある。切り替えないなら、このリポジトリは記事と自動化アプリの
+   置き場所として使う。
 
-### 判断が必要（未決）
+### 見送った判断（理由ごと残す）
 
-- **公開経路を1つに寄せるかどうか。** 現在は GitHub Actions と Dockerアプリの両方が同じ記事を作れる。
-  二重投稿はしない（日付で判定）が、運用を2か所で追うことになる。
-  - Dockerに寄せる → `.github/workflows/publish.yml` の `schedule:` を外す。写真つき記事が毎日出る。
-    ただし常時稼働ホストが要る。
-  - Actionsに寄せる → Dockerは手動実行（写真を足したいときだけ）に使う。
-  未決のまま両方を動かし続けないこと。
+- **旧 `softrenzu/ycss` への追従は行わない。** 2026-11-23に利用者が「joehisa1203のysccにpushで
+  それ以外はしない」と決めた。誤pushを防ぐため push URL を無効化済み。
+- **公開経路（Actions / Dockerアプリ）を1つに寄せる判断は保留。** 同じ日に二重投稿はしない
+  （日付で判定）ため、当面は併存で問題が出ない。寄せるなら、Dockerに寄せる場合は
+  `.github/workflows/publish.yml` の `schedule:` を外し、Actionsに寄せる場合はDockerを手動実行にする。
 
 ### 未着手
 

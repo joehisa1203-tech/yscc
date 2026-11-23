@@ -91,7 +91,9 @@ push には資格情報がコンテナ内に必要です。どちらかを選ん
 - GitHubのPersonal Access Tokenを使う場合は、ホスト側のgit credential helperにだけ保存し、
   `~/.git-credentials` を読み取り専用でマウントする。
 
-push まで通ると Render が自動デプロイします。公開できたかは Render のデプロイ履歴で確認してください。
+push先は remote `origin`（`joehisa1203-tech/yscc`）です。旧 `softrenzu/ycss` へは push しません
+（push URLを無効化済み）。**Renderは旧リポジトリを見ているため、pushしても公開サイトは更新されません。**
+反映したい場合はRender側の接続先切り替えが必要です（`docs/status.md` の残課題）。
 
 ## 生成物と置き場所
 

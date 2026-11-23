@@ -1,6 +1,10 @@
 # BLUE COURT（Y.S.C.C.横浜 JFL応援メディア）
 
-静的サイト + 毎日ブログ自動生成。公開先は Render（mainへのpushで自動デプロイ）。
+静的サイト + 毎日ブログ自動生成。
+
+**push先は `joehisa1203-tech/yscc`（remote `origin`）だけ。** 旧 `softrenzu/ycss` は remote
+`softrenzu` として参照用に残し、push URLを無効化してある。Renderは旧リポジトリを見ているため、
+このリポジトリへのpushでは公開サイトは更新されない（`docs/status.md` 参照）。
 
 ## 目次
 
