@@ -94,44 +94,56 @@ robots.txtが効いています。検索エンジンにはサイトマップURL
 （`https://joeai.co.jp/yscc/sitemap.xml`）を直接登録してください。独自サブドメインに
 移せばこの制約は無くなります。
 
-## 独自サブドメインへ移す場合（nginx + Let's Encrypt）
+## yscc.joeai.co.jp への移行（進行中・2026-11-23〜）
 
-このVPSのnginxで配ります。Render も GitHub Pages も使いません。**pushを待たずに、記事ができた
-時点で公開されます。**
+サブパス（`joeai.co.jp/yscc/`）から **https://yscc.joeai.co.jp/** へ移します。独立させると
+`robots.txt` が効き、WordPressのvhostの事故がこのサイトに波及しなくなります。
 
-順番が大事です。**DNSが先、証明書が後。** Let's Encryptはドメインに80番で接続して所有確認を
+**順番が大事です。DNSが先、証明書が後。** Let's Encryptはドメインに80番で接続して所有確認を
 するため、DNSが向いていないと証明書が取れません。
 
-1. **（利用者）DNSにAレコードを作る** … 名前は使うサブドメイン、値は `210.131.216.216`。
-   `yscc.joeai.co.jp` は別サーバー（162.43.101.99）で稼働中なので、差し替えるとその
-   サイトがURLで届かなくなる。新規サブドメインなら影響なし。
-2. **（こちら）vhostとTLS**
+| 段階 | 誰が | 内容 | 状態 |
+|---|---|---|---|
+| 1 | こちら | vhostを作り、Hostヘッダで直叩きして配信を確認 | **完了** |
+| 2 | 利用者 | DNSのAレコードを `162.43.101.99` → `210.131.216.216` に変更 | 未 |
+| 3 | こちら | 証明書の取得、`SITE_BASE_URL` の変更、旧URLからの301 | 未 |
+
+段階1と3は同じコマンドで、何度実行してもよい（冪等）。DNSがこのホストを向くまでは
+証明書の手前で止まります。
 
 ```bash
-sudo bash deploy/setup_nginx.sh <ドメイン>
+sudo SITE_EXPORT_DIR=/var/www/yscc bash deploy/setup_nginx.sh yscc.joeai.co.jp
 ```
 
-   DNSがこのホストを向いていなければ、何も変更せずに中断します。
+- vhostは `/etc/nginx/sites-available/yscc.joeai.co.jp`。元の設定は
+  `/home/ubuntu/backups/nginx-<日時>.tar.gz` に退避済み（展開して差分一致を確認済み）。
+- 設定の中身は `deploy/nginx/blue-court.conf.template`。既存サイトの作法に合わせ、隠しファイルと
+  置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
+  作っているので本来入っていませんが、二重にしています）。
+- **reloadの直後に配信確認をすると古い設定が応答する。** スクリプトは200が返るまで
+  最大10秒待ちます。待たずに叩いて、他のvhostが返した404を「配信できていない」と
+  誤判定した（2026-11-23）。
 
-3. **（こちら）`.env` を2行変えて再起動**（サブパスからの引っ越しなら、
-   `location ^~ /yscc/` を新URLへの301リダイレクトに置き換える）
+**DNS切り替えで何が起きるか:** `yscc.joeai.co.jp` には現在、別サーバー（162.43.101.99、
+Xserver）でWordPress（`noindex` 付き・タイトル「yscc」）が動いています。Aレコードを
+変えると**そのサイトはこのURLで届かなくなります**（中身は消えません。別サーバーに残ります）。
+
+段階3でやること:
 
 ```
-SITE_PUBLIC_DIR=/var/www/blue-court
-SITE_BASE_URL=https://<ドメイン>/
+SITE_BASE_URL=https://yscc.joeai.co.jp/
 ```
 
 ```bash
 docker compose up -d --force-recreate scheduler && docker compose run --rm publish
 ```
 
-`SITE_PUBLIC_DIR` を `/home/ubuntu` の外に出すのは、`/home/ubuntu` が `drwxr-x---` で
-nginx（www-data）が辿れないためです。パーミッションを緩めるより、公開物だけを
-`/var/www` に置くほうが安全です。
+`SITE_PUBLIC_DIR` は `/var/www/yscc` のまま変えません。`/home/ubuntu` の外に置くのは、
+`/home/ubuntu` が `drwxr-x---` で nginx（www-data）が辿れないためです。パーミッションを
+緩めるより、公開物だけを `/var/www` に置くほうが安全です。
 
-設定は `deploy/nginx/blue-court.conf.template`。既存サイトの作法に合わせ、隠しファイルと
-置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
-作っているので本来入っていませんが、二重にしています）。
+あわせて `hp` vhost の `location ^~ /yscc/` を **新URLへの301に置き換えます**（配信を2か所に
+残さない。残すと canonical と実体が食い違い、どちらが正かわからなくなる）。
 
 ## `.env` を変えたときの反映
 

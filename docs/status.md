@@ -5,10 +5,9 @@
 - **push先は `joehisa1203-tech/yscc` だけ**（remote `origin`、SSH）。
 - 旧 `softrenzu/ycss` は remote `softrenzu` として参照用に残し、**push URLを無効化**してある
   （`git push softrenzu` はエラーで止まる）。取り込みが必要になったら `git fetch softrenzu` で読むだけ。
-- **公開サイト https://blue-court-yscc.onrender.com/ は旧リポジトリにつながったまま。**
-  つまり、このリポジトリへpushしてもサイトは更新されない。反映するにはRenderの接続先を
-  `joehisa1203-tech/yscc` へ切り替える（利用者の作業。残課題に記載）。
-- 両リポジトリで毎日投稿のActionsが動くため、記事の履歴は今後分岐する。片方へ寄せる予定はない。
+- 旧 `softrenzu/ycss` につながっている Render（`blue-court-yscc.onrender.com`）は**使わない**。
+  公開はこのVPSのnginxが行う（pushを待たずに、記事ができた時点で公開される）。
+  Renderの接続先を切り替える予定はない。
 
 ## 稼働状態（2026-11-23 時点）
 
@@ -39,6 +38,11 @@
   暫定で開けていた 8099 は `127.0.0.1` に閉じた。
 - サブディレクトリ公開のため `/yscc/robots.txt` はクローラーに読まれない（ドメイン直下だけが有効）。
   サイトマップは `https://joeai.co.jp/yscc/sitemap.xml` を直接登録する。
+  **この制約は下記のドメイン移行で解消する。**
+- **https://yscc.joeai.co.jp/ への移行中（2026-11-23 利用者が決定）。**
+  vhostは作成・検証済み（Hostヘッダ直叩きで記事・JSON・CSSが200、`.env` や `.git` は404、
+  既存5サイトに影響なしを確認）。**DNSのAレコード変更（利用者の作業）を待っている段階。**
+  手順と現在地の表は `docs/automation.md` の「yscc.joeai.co.jp への移行」。
 
 - **このVPS（`x210-131-216-216`）で scheduler を常時起動済み**。
   `ycss-scheduler-1` / `restart: unless-stopped`（VPS再起動後も復帰）。次回実行は毎日 10:10 JST。
@@ -58,13 +62,11 @@ docker compose logs --tail=20 scheduler
 
 ## 動いているもの
 
-- 公開サイト: https://blue-court-yscc.onrender.com/ （Render。接続先は旧 `softrenzu/ycss`）
+- 公開サイト: https://joeai.co.jp/yscc/ （このVPSのnginxが `/var/www/yscc` を配信）
 - 毎日ブログ: `scripts/daily_blog.py` が JST の日付ごとに記事を1本生成。同じ日の二重投稿はしない。
-- 記事の生成経路:
-  1. **GitHub Actions** `.github/workflows/publish.yml` … 毎日 10:10 JST 頃。写真なしのテキスト記事。
-     push先の `joehisa1203-tech/yscc` でも動く。
-  2. **Dockerアプリ** `automation/` … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`。
-     Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。pushは `origin` へ。
+- **記事を作って公開するのはVPSのコンテナ1本だけ**（`automation/`、毎日 `PUBLISH_AT`）。
+  LLMが本文を書き、Driveの写真を付け、`/var/www/yscc` へ複製し、`origin` へpushする。
+  GitHub Actions は検証専用で、記事を作らずpushもしない。
 - **全経路の通し試験を実施（2026-11-23 17:00 JST）。** schedulerが時刻どおりに起動し、
   LLMが本文を書き、Driveから写真を取り、ページ生成→push→公開サイト反映まで1回で通った。
   ログ: `[LLM] wrote: ...` → `[DRIVE] folder 'つくば写真': 24 images` →
@@ -82,7 +84,7 @@ docker compose logs --tail=20 scheduler
     ファイルが0件なので、写真は付かない。
   `JOE/SNS運用` のDrive連携はOAuth（利用者がブラウザで同意する方式）で、
   ヘッドレスのコンテナからは使えない。ycss用に新規作成が必要。
-- 自動テスト: `automation/tests/`（14件）。Driveの認証情報なしで動く。
+- 自動テスト: `automation/tests/`（33件）。Driveの認証情報なしで動く。
   2026-11-23時点で、EXIF除去とヒーロー画像のパス検証をわざと壊して落ちることを確認済み。
 
 ## 決まっている方針
@@ -98,40 +100,25 @@ docker compose logs --tail=20 scheduler
 
 ### 利用者（本人）にしかできないこと
 
-1. **Anthropicのクレジット購入**（https://console.anthropic.com/ → Plans & Billing）。
-   claude.aiのサブスクリプション（Pro/Max）とAPIの課金は別。APIはクレジットが必要。
-   購入後は何も設定しなくてよい（翌日の10:10から本文がLLM製になる）。
-   費用の目安: 運用中の `claude-haiku-5-5` なら月30本で約3円。
-   品質を上げたい場合は `.env` の `ANTHROPIC_MODEL` を `claude-opus-5-5` に変える（約150円）。
-2. **Google Cloud のサービスアカウント作成とJSON鍵の配置**（`secrets/google-service-account.json`）、
-   写真フォルダの共有設定、`.env` の `GDRIVE_FOLDER_ID` 記入。手順は `docs/automation.md`。
+1. **DNSのAレコード変更（ドメイン移行の要）。** `yscc.joeai.co.jp` を
+   `162.43.101.99` → **`210.131.216.216`** に変更する。DNSは **Xserver**（`ns1〜5.xserver.jp`）で
+   管理されているので、Xserverの管理画面で操作する。
+   - 変えると、別サーバーで動いているWordPress「yscc」はこのURLで届かなくなる（中身は残る）。
+   - 浸透後に `sudo SITE_EXPORT_DIR=/var/www/yscc bash deploy/setup_nginx.sh yscc.joeai.co.jp`
+     を実行すると証明書まで進む（残りはこちらの作業）。
+2. **サッカー写真のDriveフォルダの用意。** `blog-774@blog-515607.iam.gserviceaccount.com` に
+   閲覧者で共有し、`.env` の `GDRIVE_FOLDER_ID` を記入する。手順は `docs/automation.md`。
 3. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
-4. **push資格情報の用意**（`GIT_PUSH=1` で運用する場合）。SSH鍵かcredential helperのマウント。
-5. **Dockerを常時動かすホストの決定。** scheduler は動かし続けないと毎日公開しない。
-6. **Renderの接続先切り替え（旧URLを使い続けたい場合のみ）。** 現在Renderは旧 `softrenzu/ycss` を
-   見ているため、このリポジトリの変更はサイトに出ない。切り替える場合は、`scripts/daily_blog.py` の
-   `BASE`（現在 `https://blue-court-yscc.onrender.com/`）とcanonical・og:url・sitemapのURLも
-   新しい公開URLに合わせる必要がある。切り替えないなら、このリポジトリは記事と自動化アプリの
-   置き場所として使う。
 
 ### 見送った判断（理由ごと残す）
 
 - **旧 `softrenzu/ycss` への追従は行わない。** 2026-11-23に利用者が「joehisa1203のysccにpushで
   それ以外はしない」と決めた。誤pushを防ぐため push URL を無効化済み。
-- **公開経路（Actions / Dockerアプリ）を1つに寄せる判断は保留。** 同じ日に二重投稿はしない
-  （日付で判定）ため、当面は併存で問題が出ない。寄せるなら、Dockerに寄せる場合は
-  `.github/workflows/publish.yml` の `schedule:` を外し、Actionsに寄せる場合はDockerを手動実行にする。
-
-### 未着手（判断済みで手が付いていないもの）
-
-- **独自サブドメインへ移すかどうか（任意）。** いまは `joeai.co.jp/yscc/` で動いている。
-  移すと robots.txt が有効になり、WordPressのvhostから独立する。`yscc.joeai.co.jp` は
-  別サーバー（162.43.101.99）でWordPressが稼働中なので、`blue-court.joeai.co.jp` 等の
-  新規サブドメインを使う。DNS変更は利用者の作業。
-  決まったら `sudo bash deploy/setup_nginx.sh <ドメイン>` を実行し、`.env` の
-  `SITE_PUBLIC_DIR` と `SITE_BASE_URL` を変える。設定ファイルとスクリプトは用意済み
-  （`deploy/`）。nginx 1.28.3・certbot導入済みで、`geo` / `reply` / `sns` など
-  joeai.co.jp のサブドメイン運用の前例あり。
+- **公開経路はVPSのコンテナ1本に寄せた**（2026-11-23）。Actionsにもコミットさせていたため
+  片方のpushが拒否され続ける状態になった。`publish.yml` から `schedule:` とコミット処理を外し、
+  権限を `contents: read` に落とした。**publisherを2つに戻さない。**
+- **新規サブドメイン（`blue-court.joeai.co.jp` 等）の取得は見送った**（2026-11-23）。
+  既にDNSに登録済みの `yscc.joeai.co.jp` を向け替えるほうが、利用者の操作が1回で済むため。
 
 ### 未着手
 
