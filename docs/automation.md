@@ -81,14 +81,15 @@ TLSは Let's Encrypt（certbot が自動更新）。Render も GitHub Pages も�
   root /var/www/yscc;  location / → try_files
 
 /etc/nginx/sites-available/hp （joeai.co.jp = WordPress）
-  location ^~ /yscc/ → 301 https://yscc.joeai.co.jp/$1    ← 旧URL。配信はしない
-  location = /yscc   → 301 https://yscc.joeai.co.jp/
+  /yscc の記述なし    ← 旧URLは削除済み。WordPressの404に落ちる
 ```
 
 - `.env` は `SITE_PUBLIC_DIR=/var/www/yscc`、`SITE_BASE_URL=https://yscc.joeai.co.jp/`
-- **旧URLで配信を続けない。** 2か所で配ると canonical と実体が食い違い、どちらが正かわからなく
-  なる。`hp` の `location ^~ /yscc/` は301だけを返す形に置き換えた（元の設定は
-  `/home/ubuntu/backups/hp.bak-*-before-301`）。
+- **旧URL（`joeai.co.jp/yscc/`）は `hp` vhost から削除した。** 2か所で配ると canonical と実体が
+  食い違うため、まず301だけを返す形に置き換え、同日にその301も消した（利用者の判断）。
+  退避は `/home/ubuntu/backups/hp.bak-*-before-301` と `hp.bak-*-before-removing-301`。
+  戻すときは `sudo cp -a <退避ファイル> /etc/nginx/sites-available/hp` して
+  `sudo nginx -t && sudo systemctl reload nginx`。
 - `SITE_PUBLIC_DIR` を `/home/ubuntu` の外に置くのは、`/home/ubuntu` が `drwxr-x---` で
   nginx（www-data）が辿れないためです。パーミッションを緩めるより、公開物だけを
   `/var/www` に置くほうが安全です。

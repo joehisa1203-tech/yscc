@@ -41,8 +41,11 @@
   certbotが自動更新）。構成は `docs/automation.md`。
   - 利用者がXserverでAレコードを `162.43.101.99` → `210.131.216.216` に変更。これにより
     **別サーバーで動いていたWordPress「yscc」はこのURLでは届かなくなった**（中身は別サーバーに残存）。
-  - 旧URL `https://joeai.co.jp/yscc/` は**301で新URLへ飛ばすだけ**にした（配信は1か所）。
-    記事の個別URLも `/yscc/blog/x.html` → `/blog/x.html` に対応付けて追跡確認済み。
+  - 旧URL `https://joeai.co.jp/yscc/` は、まず301だけを返す形にし、**同日に利用者の判断で
+    設定ごと削除した**（現在404）。`hp` vhost に `/yscc` の記述は残っていない。
+    退避は `/home/ubuntu/backups/hp.bak-20261123-235942-before-removing-301`。
+    - これにより、旧URLのブックマークや検索結果から来た人は新URLへ飛べず、
+      WordPressの404に落ちる。**承知の上での判断**（下記「見送った判断」）。
   - 独立ドメインになったので **`robots.txt` が有効になった**（サブパス時代は無視されていた）。
     サイトマップは `https://yscc.joeai.co.jp/sitemap.xml`。
   - WordPress（`https://joeai.co.jp/`）と `geo` / `sns` / `reply` は移行前と同じ応答を確認済み。
@@ -126,8 +129,10 @@ docker compose logs --tail=20 scheduler
   権限を `contents: read` に落とした。**publisherを2つに戻さない。**
 - **新規サブドメイン（`blue-court.joeai.co.jp` 等）の取得は見送った**（2026-11-23）。
   既にDNSに登録済みの `yscc.joeai.co.jp` を向け替えるほうが、利用者の操作が1回で済むため。
-- **旧URL（`joeai.co.jp/yscc/`）での配信は残さない。** 2か所で配ると canonical と実体が
-  食い違い、どちらが正かわからなくなる。301だけを返す。
+- **旧URL（`joeai.co.jp/yscc/`）は配信も301も残さない**（2026-11-23に利用者が決定）。
+  2か所で配ると canonical と実体が食い違うため、まず301だけにし、その301も消した。
+  **旧URLのブックマークと検索結果からの流入は新URLへ繋がらず404になる**ことは承知の上。
+  再提案しないこと。復活させたい場合の退避先は上記（`hp.bak-*-before-removing-301`）。
 - **別サーバー（162.43.101.99、Xserver）のWordPress「yscc」はそのまま残す**（2026-11-23に
   利用者が決定）。DNSを向け替えたので `yscc.joeai.co.jp` では届かないが、あちらのサーバーでは
   動き続けている。**公開サイトには影響しない**ため、停止・削除はしない。

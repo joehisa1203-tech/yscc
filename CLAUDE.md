@@ -2,7 +2,7 @@
 
 静的サイト + 毎日ブログ自動生成。公開URLは **https://yscc.joeai.co.jp/**
 （このVPSのnginxが `/var/www/yscc` を配信。vhostは `yscc.joeai.co.jp`、TLSはLet's Encrypt）。
-旧URL `joeai.co.jp/yscc/` は301で新URLへ飛ばしている。**配信を旧URLに戻さない。**
+旧URL `joeai.co.jp/yscc/` は**設定ごと削除した（404）**。`hp` vhostに `/yscc` を戻さない。
 
 **push先は `joehisa1203-tech/yscc`（remote `origin`）だけ。** 旧 `softrenzu/ycss` は remote
 `softrenzu` として参照用に残し、push URLを無効化してある。Renderは旧リポジトリを見ているため、
