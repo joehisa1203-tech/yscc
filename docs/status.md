@@ -85,7 +85,10 @@ docker compose logs --tail=20 scheduler
 - **独自ドメインの決定。** `yscc.joeai.co.jp` は別サーバー（162.43.101.99）で
   WordPressが稼働中。差し替えるとそのサイトがURLで届かなくなる。新規サブドメイン
   （例 `blue-court.joeai.co.jp`）なら影響なし。DNS変更は利用者の作業。
-  決まったら `.env` の `SITE_BASE_URL` を変え、nginx vhostとLet's Encryptを設定する。
+  決まったら `sudo bash deploy/setup_nginx.sh <ドメイン>` を実行し、`.env` の
+  `SITE_PUBLIC_DIR` と `SITE_BASE_URL` を変える。設定ファイルとスクリプトは用意済み
+  （`deploy/`）。nginx 1.28.3・certbot導入済みで、`geo` / `reply` / `sns` など
+  joeai.co.jp のサブドメイン運用の前例あり。
 
 ### 未着手
 

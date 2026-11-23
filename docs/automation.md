@@ -61,6 +61,44 @@
 docker compose up -d preview     # http://<このホスト>:8099/（PREVIEW_BIND=127.0.0.1 で内側だけに）
 ```
 
+## 独自ドメインで公開する（nginx + Let's Encrypt）
+
+このVPSのnginxで配ります。Render も GitHub Pages も使いません。**pushを待たずに、記事ができた
+時点で公開されます。**
+
+順番が大事です。**DNSが先、証明書が後。** Let's Encryptはドメインに80番で接続して所有確認を
+するため、DNSが向いていないと証明書が取れません。
+
+1. **（利用者）DNSにAレコードを作る** … 名前は使うサブドメイン、値は `210.131.216.216`。
+   `yscc.joeai.co.jp` は別サーバー（162.43.101.99）で稼働中なので、差し替えるとその
+   サイトがURLで届かなくなる。新規サブドメインなら影響なし。
+2. **（こちら）vhostとTLS**
+
+```bash
+sudo bash deploy/setup_nginx.sh <ドメイン>
+```
+
+   DNSがこのホストを向いていなければ、何も変更せずに中断します。
+
+3. **（こちら）`.env` を2行変えて再起動**
+
+```
+SITE_PUBLIC_DIR=/var/www/blue-court
+SITE_BASE_URL=https://<ドメイン>/
+```
+
+```bash
+docker compose restart scheduler && docker compose run --rm publish
+```
+
+`SITE_PUBLIC_DIR` を `/home/ubuntu` の外に出すのは、`/home/ubuntu` が `drwxr-x---` で
+nginx（www-data）が辿れないためです。パーミッションを緩めるより、公開物だけを
+`/var/www` に置くほうが安全です。
+
+設定は `deploy/nginx/blue-court.conf.template`。既存サイトの作法に合わせ、隠しファイルと
+置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
+作っているので本来入っていませんが、二重にしています）。
+
 ## 使い方
 
 ```bash

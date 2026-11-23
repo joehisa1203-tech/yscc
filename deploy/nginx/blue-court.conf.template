@@ -1,0 +1,41 @@
+# BLUE COURT（静的サイト）. deploy/setup_nginx.sh が __DOMAIN__ と __ROOT__ を置換して
+# /etc/nginx/sites-available/ に置く。TLSの行は certbot --nginx が後から追記する。
+#
+# 既存サイト（joeai.co.jp 等）の作法に合わせている:
+#   - 遮断は 404 を返し blocked.log に記録する（捨てると fail2ban が相手を見つけられない）
+#   - 隠しファイルと置き忘れファイルを web から取らせない
+# このサイトはPHPを使わない静的配信なので、WordPress向けの保護は入れていない。
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    root __ROOT__;
+    index index.html;
+
+    access_log /var/log/nginx/blue-court.access.log;
+    error_log  /var/log/nginx/blue-court.error.log;
+
+    add_header X-Frame-Options        "SAMEORIGIN"                      always;
+    add_header X-Content-Type-Options "nosniff"                         always;
+    add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
+
+    # .env や .git を web から取らせない。公開ディレクトリは許可リストで作っているので
+    # 本来入っていないが、設定ミスの保険として二重にしておく（certbot の .well-known は通す）。
+    location ~ /\.(?!well-known) { access_log /var/log/nginx/blocked.log; return 404; }
+    location ~* \.(bak|old|orig|save|swp|swo|sql|tar|tgz|zip|log|py|yml|yaml|json\.bak)$ {
+        access_log /var/log/nginx/blocked.log; return 404;
+    }
+
+    # 記事とJSONは毎日入れ替わるので短め、CSS/JS/画像は長めに持たせる。
+    location = /data/posts.json   { expires 5m; add_header Cache-Control "public, max-age=300"; }
+    location = /data/matches.json { expires 5m; add_header Cache-Control "public, max-age=300"; }
+    location ~* \.(css|js|svg|jpg|jpeg|png|webp|ico)$ {
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800";
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

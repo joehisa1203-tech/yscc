@@ -23,12 +23,16 @@ services:
       HOME: /home/app
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
       # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
+      SITE_EXPORT_DIR: /public
       GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
     volumes:
       - ./:/app
       - ./secrets:/secrets:ro
       # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
       - ${SSH_DIR:-~/.ssh}:/ssh:ro
+      # 公開ディレクトリ。nginxで配るときは .env の SITE_PUBLIC_DIR を
+      # /var/www/blue-court にする（/home/ubuntu は www-data が辿れない）。
+      - ${SITE_PUBLIC_DIR:-./site}:/public
     command: ["python", "-m", "automation.app.run_once"]
 
   scheduler:
@@ -49,12 +53,16 @@ services:
       HOME: /home/app
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
       # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
+      SITE_EXPORT_DIR: /public
       GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
     volumes:
       - ./:/app
       - ./secrets:/secrets:ro
       # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
       - ${SSH_DIR:-~/.ssh}:/ssh:ro
+      # 公開ディレクトリ。nginxで配るときは .env の SITE_PUBLIC_DIR を
+      # /var/www/blue-court にする（/home/ubuntu は www-data が辿れない）。
+      - ${SITE_PUBLIC_DIR:-./site}:/public
     command: ["python", "-m", "automation.app.scheduler"]
 
   # 公開用。site/ だけを配る（リポジトリ全体を配ると .env が読める）。
@@ -66,5 +74,5 @@ services:
     ports:
       - "${PREVIEW_BIND:-0.0.0.0}:${PREVIEW_PORT:-8099}:8000"
     volumes:
-      - ./site:/site:ro
+      - ${SITE_PUBLIC_DIR:-./site}:/site:ro
     command: ["python", "-m", "http.server", "8000"]

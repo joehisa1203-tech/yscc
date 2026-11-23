@@ -17,6 +17,9 @@ POSTS_FILE = DATA_DIR / "posts.json"
 PHOTO_LEDGER = DATA_DIR / "photos.json"
 PHOTO_DIR = SITE_ROOT / "assets" / "photos"
 PHOTO_WEB_DIR = "assets/photos"
+# 公開用の書き出し先。nginxで配る場合は /home/ubuntu 配下を避ける
+# （/home/ubuntu は drwxr-x--- で www-data が辿れない）。
+SITE_EXPORT_DIR = Path(os.environ.get("SITE_EXPORT_DIR", str(SITE_ROOT / "site")))
 
 # --- Google Drive -----------------------------------------------------------
 GDRIVE_FOLDER_ID = os.environ.get("GDRIVE_FOLDER_ID", "").strip()

@@ -107,8 +107,8 @@ PUBLIC_DIRS = ("blog", "data", "assets")
 
 def export_site() -> Path:
     """Copy the public subset into site/ and return that directory."""
-    target = config.SITE_ROOT / "site"
-    target.mkdir(exist_ok=True)
+    target = config.SITE_EXPORT_DIR
+    target.mkdir(parents=True, exist_ok=True)
     for name in PUBLIC_FILES:
         source = config.SITE_ROOT / name
         if source.exists():
