@@ -12,16 +12,16 @@
 
 ## 稼働状態（2026-11-23 時点）
 
-- **記事の執筆はClaude（`claude-haiku-5-5`）に切り替え済み。キーは設定したが、
-  Anthropicアカウントのクレジット残高が不足していて呼び出せない**（HTTP 400
-  "credit balance is too low"）。そのため、いまは手書き24本のローテーションで動いている。
-  **クレジットを購入すれば、設定変更なしで翌日から本文が毎日変わる。**
-  - 使っている鍵: `/home/ubuntu/JOE/geotool/.env` の `GEO_TOOL_CLAUDE_API_KEY`（2026-11-23に流用。
-    sha256先頭 `2cacb5a4`）。形式は正しく、認証は通る。
-  - `/home/ubuntu/JOE/HP-wordpress/backend/.env` の `ANTHROPIC_API_KEY`（sha256先頭 `968bc4f1`、
-    長さ106・`sk-ant-api03-` 形式ではない）は **401 invalid x-api-key** で使えなかった。
-    HP-wordpress側のAI機能も同じ鍵なら動いていない可能性がある（未調査・別案件）。
-  - 毎日1回だけ失敗して手書きに落ちるだけなので、残高が無い間も公開は止まらない。
+- **記事の執筆はOpenAI（`gpt-4.1-mini`）で稼働中。** 2026-11-23の記事から実際にLLM製
+  （`data/posts.json` の `writer` フィールドで判別できる）。題材は日付で16種をローテーション。
+  - Anthropicは**クレジット残高不足**で呼び出せなかった（400）。VPS上の既存キーのうち
+    `JOE/geotool/.env` の鍵は認証は通る、`JOE/HP-wordpress/backend/.env` のAnthropicキーは401で無効。
+  - 使っているOpenAIキーは `JOE/HP-wordpress/backend/.env` の `OPENAI_API_KEY` を流用
+    （`geotool/.env.save` にも同じ鍵）。`beds24-ai-reply/.env` のOpenAIキーは**期限切れ**で、
+    あちらのAI返信が止まっている可能性がある（別案件・未調査）。
+  - **2026-11-23: このキーの値をセッションのログに表示してしまった。** 失効と再発行を
+    推奨する（利用者の作業）。差し替え先は3か所: `BLOG/ycss/.env`、
+    `JOE/HP-wordpress/backend/.env`、`JOE/geotool/.env.save`。
 - **GitHub Actions は検証専用にした（コミットもpushもしない）。** publisher はVPSの1本だけ。
   2026-11-23にpush時のActionsがコミットしてVPSのクローンと食い違ったため、
   `publish.yml` からコミット処理を外し、権限も `contents: read` に落とした。

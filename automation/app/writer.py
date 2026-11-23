@@ -16,7 +16,12 @@ import json
 import os
 import re
 
-MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
+# 2026-11-23: Anthropicのアカウントはクレジット残高不足で呼び出せず、このVPSに
+# 残高のあるOpenAIキーがあったため、呼び出し先をOpenAIに置き換えた。
+# 事業者を戻す場合は、この呼び出し部分だけを差し替える（判定とフォールバックは
+# 事業者に依存しない）。両方を並べて持たないのは、どちらが使われているか
+# 分からなくなるのを避けるため。
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 CATEGORIES = ("観戦ガイド", "クラブを知る", "横浜の街")
 
@@ -36,6 +41,7 @@ SYSTEM = """あなたはY.S.C.C.横浜（日本フットボールリーグ=JFL�
 
 書き方:
 - 読者は「サッカーをあまり見たことがない横浜の人」です。専門用語には短い説明を添える。
+- 本文は3段落。各段落は100〜200文字。1〜2文で終わる短い段落は書かない。
 - 煽らない。感嘆符を多用しない。断定できないことは断定しない。
 - 観戦の楽しみ方、スタジアムでの過ごし方、サッカーの見どころ、横浜の街、
   クラブの成り立ちなど、調べなくても書ける普遍的な話題を選ぶ。
@@ -49,10 +55,10 @@ SCHEMA = {
         "summary": {"type": "string", "description": "一覧に出る要約。40〜80文字程度"},
         "body": {
             "type": "array",
-            "description": "本文の段落。3〜4段落。各段落80〜200文字程度",
+            # minItems/maxItems はOpenAIのstrictモードが受け付けないため書かない。
+            # 段落数は check() が3〜4本で判定する。
+            "description": "本文の段落。必ず3段落。各段落100〜200文字（短い段落は不可）",
             "items": {"type": "string"},
-            "minItems": 3,
-            "maxItems": 4,
         },
     },
     "required": ["category", "title", "summary", "body"],
@@ -77,13 +83,13 @@ BANNED = [
 
 
 def configured() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    return bool(os.environ.get("OPENAI_API_KEY", "").strip())
 
 
 def status() -> str:
     """Why the writer is off, without printing any key material."""
     if not configured():
-        return "ANTHROPIC_API_KEY is not set"
+        return "OPENAI_API_KEY is not set"
     return f"configured (model {MODEL})"
 
 
@@ -104,7 +110,7 @@ def check(article: dict, recent_titles: list[str]) -> list[str]:
         problems.append(f"段落数が範囲外: {len(body) if isinstance(body, list) else type(body)}")
     else:
         for index, paragraph in enumerate(body, 1):
-            if not isinstance(paragraph, str) or not 40 <= len(paragraph) <= 400:
+            if not isinstance(paragraph, str) or not 60 <= len(paragraph) <= 400:
                 problems.append(f"{index}段落目の長さが範囲外")
     if title in recent_titles or any(title in t for t in recent_titles):
         problems.append("最近の記事と同じタイトル")
@@ -116,9 +122,40 @@ def check(article: dict, recent_titles: list[str]) -> list[str]:
     return problems
 
 
+# 題材を日付で回す。空のプロンプトだと「スタジアム周辺の街歩き」のような無難な
+# 題材に寄り、3回続けてほぼ同じ記事になった（2026-11-23の実測）。
+THEMES = (
+    "初観戦の準備（持ち物・服装・到着時刻）",
+    "スタジアムへの行き方と会場の見分け方",
+    "サッカーの見どころ（ボールのない場所の動き）",
+    "電子チケットの買い方と当日の入場",
+    "家族や子どもと行く観戦",
+    "一人で行く観戦の楽しみ方",
+    "友人をサッカー観戦に誘うときの伝え方",
+    "セットプレー（CK・FK）の見方",
+    "守備から攻撃に変わる瞬間の面白さ",
+    "ゴールキーパーの仕事を見る",
+    "JFLというリーグの位置づけと地域クラブ",
+    "Y.S.C.C.横浜というクラブの成り立ち",
+    "横浜の街とスポーツ観戦のある週末",
+    "観戦後に次の試合を探す習慣",
+    "選手の名前を覚えていく楽しみ",
+    "スタジアムでの撮影とまわりへの配慮",
+)
+
+
+def theme_for(date: str) -> str:
+    from datetime import datetime
+    ordinal = datetime.strptime(date, "%Y-%m-%d").date().toordinal()
+    return THEMES[ordinal % len(THEMES)]
+
+
 def build_prompt(date: str, recent_titles: list[str]) -> str:
     recent = "\n".join("- " + t for t in recent_titles[:20]) or "- （まだありません）"
     return f"""{date}（日本時間）に公開する記事を1本書いてください。
+
+今日の題材: {theme_for(date)}
+この題材に沿って書いてください。題材から外れた無難な内容にしないでください。
 
 直近に公開した記事のタイトル（内容と切り口が重ならないようにしてください）:
 {recent}
@@ -132,26 +169,32 @@ def write_article(date: str, recent_titles: list[str], client=None) -> dict | No
         print(f"[LLM] skipped: {status()}")
         return None
     if client is None:
-        import anthropic  # imported here so the container runs without a key
-        client = anthropic.Anthropic()
+        import openai  # imported here so the container runs without a key
+        client = openai.OpenAI()
     try:
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": build_prompt(date, recent_titles)}],
-            output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
+            messages=[
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": build_prompt(date, recent_titles)},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "blue_court_article", "strict": True, "schema": SCHEMA},
+            },
         )
     except Exception as error:  # an API outage must not stop the blog
         print(f"[LLM] call failed, falling back to the written rotation: {error}")
         return None
-    if getattr(response, "stop_reason", None) not in ("end_turn", "stop_sequence"):
-        print(f"[LLM] unusable stop_reason={getattr(response, 'stop_reason', None)!r}")
+    choice = response.choices[0]
+    if choice.finish_reason != "stop":
+        # length なら本文が途中で切れている。refusal なら拒否された。
+        print(f"[LLM] unusable finish_reason={choice.finish_reason!r}")
         return None
     try:
-        text = next(b.text for b in response.content if b.type == "text")
-        article = json.loads(text)
-    except (StopIteration, ValueError, AttributeError) as error:
+        article = json.loads(choice.message.content)
+    except (TypeError, ValueError) as error:
         print(f"[LLM] could not read the response: {error}")
         return None
     problems = check(article, recent_titles)

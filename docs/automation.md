@@ -5,7 +5,7 @@
 `automation/` は、BLUE COURT の毎日ブログを **Dockerコンテナ1つで** 公開するアプリです。
 
 1. その日（JST）の記事を1本用意する
-   - `ANTHROPIC_API_KEY` があれば **Claudeが書く**（`automation/app/writer.py`）
+   - `OPENAI_API_KEY` があれば **OpenAIが書く**（`automation/app/writer.py`）
    - 無い・失敗した・禁止表現が出た場合は `scripts/daily_blog.py` の手書き24本から選ぶ
 2. Google Drive のフォルダから **まだ使っていない写真を1枚** 取り出し、記事のヒーロー画像にする
 3. 記事ページ・`sitemap.xml` を作り直す
@@ -31,11 +31,19 @@
 
 ## 記事の執筆（LLM）
 
-`automation/app/writer.py` が Claude API を **1日1回だけ** 呼びます。
+`automation/app/writer.py` が OpenAI の chat completions を **1日1回だけ** 呼びます。
 
-- **運用中のモデルは `claude-haiku-5-5`**（`.env` の `ANTHROPIC_MODEL`。コード側の既定値は
-  `claude-opus-5-5`）。毎日1本の短い記事なのでHaikuで足りる。月30本で約3円。
-  品質を上げたいときは `.env` を `claude-opus-5-5` に変えて `docker compose restart scheduler`
+**なぜOpenAIなのか。** 当初はClaudeで実装したが、Anthropicアカウントのクレジット残高が
+不足していて呼び出せなかった（400）。このVPSに残高のあるOpenAIキーがあったため、
+2026-11-23に呼び出し部分だけを置き換えた。判定・フォールバック・題材ローテーションは
+事業者に依存しないので、戻すときも差し替えるのは数十行だけ。**両方の呼び出しを並べて
+残していない**（どちらが使われているか分からなくなるため）。
+
+- モデルは `gpt-4.1-mini`（`.env` の `OPENAI_MODEL`）。毎日1本の短い記事ならこれで足りる
+- **題材を日付で回す**（`writer.THEMES`、16種）。題材を指定しないと「スタジアム周辺の
+  街歩き」のような無難な内容に寄り、3回続けてほぼ同じ記事になった（実測）
+- 段落は3つ・各100〜200文字を指示し、60文字未満の段落は破棄する（1文だけの
+  締め段落が出て記事全体が落ちたため、下限を40→60文字に調整）
 - 出力は JSON Schema で固定（`category` / `title` / `summary` / `body[3-4]`）
 - **禁止表現チェックを通らない記事は捨てる。** 判定は `writer.BANNED`:
   スコア・得点・人数・金額・観客数・チケット在庫・試合結果・関係者コメント・
@@ -181,8 +189,8 @@ docker compose run --rm --entrypoint python publish -c "from automation.app impo
 | `PHOTO_CREDIT` | 空 | 写真の下に出すクレジット。空なら出さない |
 | `PHOTO_WIDTH` / `PHOTO_HEIGHT` / `PHOTO_QUALITY` | 1600 / 900 / 82 | 書き出しサイズと画質 |
 | `PHOTO_REUSE` | `1` | 全部使い切った後に古い写真を再利用するか。`0` なら写真なしで継続 |
-| `ANTHROPIC_API_KEY` | 空 | 設定するとClaudeが本文を書く。空なら手書き24本 |
-| `ANTHROPIC_MODEL` | `claude-opus-5-5`（運用値は `claude-haiku-5-5`） | 執筆モデル |
+| `OPENAI_API_KEY` | 空 | 設定するとOpenAIが本文を書く。空なら手書き24本 |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | 執筆モデル |
 | `LLM_MAX_TOKENS` | `2000` | 1記事あたりの出力上限 |
 | `SITE_BASE_URL` | onrenderのURL | canonical・og:url・sitemap・記事URLの基点 |
 | `PREVIEW_BIND` | `0.0.0.0` | `preview` の待ち受け。`127.0.0.1` で外部非公開 |

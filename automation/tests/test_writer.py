@@ -31,18 +31,20 @@ def good_article(**overrides) -> dict:
 
 
 class FakeResponse:
-    def __init__(self, payload, stop_reason="end_turn"):
-        self.stop_reason = stop_reason
-        self.content = [mock.Mock(type="text", text=json.dumps(payload, ensure_ascii=False))]
+    """openai の chat.completions.create が返す形の最小版。"""
+
+    def __init__(self, payload, finish_reason="stop"):
+        message = mock.Mock(content=json.dumps(payload, ensure_ascii=False))
+        self.choices = [mock.Mock(finish_reason=finish_reason, message=message)]
 
 
 class FakeClient:
-    def __init__(self, payload, stop_reason="end_turn"):
+    def __init__(self, payload, finish_reason="stop"):
         self.payload = payload
-        self.stop_reason = stop_reason
+        self.finish_reason = finish_reason
         self.calls: list[dict] = []
 
-    class _Messages:
+    class _Completions:
         def __init__(self, outer):
             self.outer = outer
 
@@ -50,11 +52,11 @@ class FakeClient:
             self.outer.calls.append(kwargs)
             if isinstance(self.outer.payload, Exception):
                 raise self.outer.payload
-            return FakeResponse(self.outer.payload, self.outer.stop_reason)
+            return FakeResponse(self.outer.payload, self.outer.finish_reason)
 
     @property
-    def messages(self):
-        return self._Messages(self)
+    def chat(self):
+        return mock.Mock(completions=self._Completions(self))
 
 
 class GuardrailTest(unittest.TestCase):
@@ -103,33 +105,35 @@ class GuardrailTest(unittest.TestCase):
 class WriteArticleTest(unittest.TestCase):
     def test_returns_the_article_and_sends_the_schema(self):
         client = FakeClient(good_article())
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-not-real"}):
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-not-real"}):
             article = writer.write_article("2026-11-24", ["前の記事"], client=client)
         self.assertEqual(article["category"], "観戦ガイド")
         sent = client.calls[0]
-        self.assertEqual(sent["output_config"]["format"]["type"], "json_schema")
-        self.assertIn("前の記事", sent["messages"][0]["content"])  # avoids repeats
-        self.assertIn("スコア", sent["system"])                    # prohibitions are sent
+        self.assertEqual(sent["response_format"]["type"], "json_schema")
+        self.assertTrue(sent["response_format"]["json_schema"]["strict"])
+        system, user = sent["messages"]
+        self.assertIn("スコア", system["content"])        # prohibitions are sent
+        self.assertIn("前の記事", user["content"])        # avoids repeats
 
     def test_returns_none_without_a_key(self):
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": ""}):
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
             self.assertIsNone(writer.write_article("2026-11-24", []))
 
     def test_returns_none_when_the_api_fails(self):
         client = FakeClient(RuntimeError("503 overloaded"))
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-not-real"}):
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-not-real"}):
             self.assertIsNone(writer.write_article("2026-11-24", [], client=client))
 
-    def test_returns_none_on_a_refusal(self):
-        client = FakeClient(good_article(), stop_reason="refusal")
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-not-real"}):
+    def test_returns_none_on_a_truncated_or_refused_answer(self):
+        client = FakeClient(good_article(), finish_reason="length")
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-not-real"}):
             self.assertIsNone(writer.write_article("2026-11-24", [], client=client))
 
     def test_returns_none_when_a_guardrail_trips(self):
         bad = good_article()
         bad["body"][0] = "前節は3-0で勝利しました。" + bad["body"][0]
         client = FakeClient(bad)
-        with mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key-not-real"}):
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": "test-key-not-real"}):
             self.assertIsNone(writer.write_article("2026-11-24", [], client=client))
 
 

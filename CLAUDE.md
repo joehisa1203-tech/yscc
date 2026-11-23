@@ -24,6 +24,8 @@
   公開は `site/`（`publisher.export_site()` の許可リスト）だけ。
 - **LLMが書いた本文は禁止表現チェックで捨てられる。** 判定は `automation/app/writer.py` の
   `BANNED`。パターンを消すとテストが落ちる（`automation/tests/test_writer.py`）。
+  執筆は OpenAI（`gpt-4.1-mini`）。**事業者の呼び出しを2つ並べて持たない**（どちらが
+  使われているか分からなくなる）。戻すなら置き換える。
 - **架空の情報を書かない。** 試合結果、観客数、チケット残席、選手コメント、募集状況は生成しない。
   記事テンプレートは `scripts/daily_blog.py` の `TIPS`（`grep -n "^TIPS" scripts/daily_blog.py`）。
 - **試合日程は自動更新されない。** `data/matches.json` は公式サイトを見て手で直す。
