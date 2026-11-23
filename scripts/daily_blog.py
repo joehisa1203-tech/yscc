@@ -66,6 +66,16 @@ def page(post: dict) -> str:
     published = escape(post["date"])
     url = BASE + quote("blog/" + post["id"] + ".html")
     body = "\n".join("<p>" + escape(p) + "</p>" for p in post.get("body", []))
+    hero = post.get("hero") or {}
+    hero_src = str(hero.get("src", ""))
+    hero_html = ""
+    hero_meta = ""
+    if hero_src.startswith("assets/"):
+        caption = escape(hero.get("credit", "")) if hero.get("credit") else ""
+        hero_html = ('<figure class="post-photo"><img src="../' + escape(hero_src) + '" alt="' + escape(hero.get("alt", "")) +
+                     '" width="1600" height="900" loading="eager" decoding="async">' +
+                     ('<figcaption>' + caption + '</figcaption>' if caption else '') + '</figure>')
+        hero_meta = '<meta property="og:image" content="' + escape(BASE + hero_src) + '">'
     links = []
     for source in post.get("sources", []):
         source_url = str(source.get("url", ""))
@@ -77,13 +87,13 @@ def page(post: dict) -> str:
                  '<a href="' + TICKET + '" target="_blank" rel="noopener noreferrer">Y.S.C.C.公式チケット ↗</a>']
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="{summary}"><meta property="og:title" content="{title} | BLUE COURT"><meta property="og:description" content="{summary}">
+<meta name="description" content="{summary}"><meta property="og:title" content="{title} | BLUE COURT"><meta property="og:description" content="{summary}">{hero_meta}
 <link rel="canonical" href="{escape(url)}"><link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../styles.css">
 <title>{title} | BLUE COURT</title>
-<style>.post-hero{{background:#081b36;color:#fff;padding:85px 0 76px}}.post-hero a{{color:#ff9e77;font-weight:800;font-size:12px}}.post-hero h1{{font-size:clamp(29px,5vw,53px);line-height:1.4;letter-spacing:-.06em;max-width:850px}}.post-meta{{font-weight:800;font-size:12px;letter-spacing:.07em;color:#b7d0e7}}.post-content{{max-width:800px;margin:auto;padding:60px 24px 100px}}.post-content p{{font-size:16px;line-height:2.2;margin:0 0 30px}}.post-sources{{border-top:1px solid #d9e2ee;margin-top:50px;padding-top:25px}}.post-sources a{{display:inline-block;padding:10px 14px;background:#f2f6fb;color:#105bab;margin:5px;font-weight:800;font-size:12px}}.post-back{{display:inline-block;margin-top:45px;font-size:13px;font-weight:800;color:#105bab}}</style>
+<style>.post-hero{{background:#081b36;color:#fff;padding:85px 0 76px}}.post-hero a{{color:#ff9e77;font-weight:800;font-size:12px}}.post-hero h1{{font-size:clamp(29px,5vw,53px);line-height:1.4;letter-spacing:-.06em;max-width:850px}}.post-meta{{font-weight:800;font-size:12px;letter-spacing:.07em;color:#b7d0e7}}.post-content{{max-width:800px;margin:auto;padding:60px 24px 100px}}.post-content p{{font-size:16px;line-height:2.2;margin:0 0 30px}}.post-photo{{margin:0 0 34px}}.post-photo img{{width:100%;height:auto;display:block;aspect-ratio:16/9;object-fit:cover}}.post-photo figcaption{{font-size:11px;color:#607388;margin-top:9px}}.post-sources{{border-top:1px solid #d9e2ee;margin-top:50px;padding-top:25px}}.post-sources a{{display:inline-block;padding:10px 14px;background:#f2f6fb;color:#105bab;margin:5px;font-weight:800;font-size:12px}}.post-back{{display:inline-block;margin-top:45px;font-size:13px;font-weight:800;color:#105bab}}</style>
 <script type="application/ld+json">{{"@context":"https://schema.org","@type":"BlogPosting","headline":{json.dumps(post["title"], ensure_ascii=False)},"datePublished":{json.dumps(post["date"])},"description":{json.dumps(post["summary"], ensure_ascii=False)},"mainEntityOfPage":{json.dumps(url)}}}</script>
 </head><body><header class="header"><div class="wrap header-inner"><a class="brand" href="../"><span class="brand-symbol"><span class="brand-ball"></span></span><span class="brand-name"><b>BLUE<span>COURT</span><i>.</i></b><small>Y.S.C.C. YOKOHAMA FOOTBALL FAN MEDIA</small></span></a><a class="header-cta" href="../#journal">記事一覧へ ↗</a></div></header>
-<main><section class="post-hero"><div class="wrap"><a href="../#journal">← BLUE COURT JOURNAL</a><p class="post-meta">{published} ／ {escape(post["category"])}</p><h1>{title}</h1><p>{summary}</p></div></section><article class="post-content">{body}<div class="post-sources"><h2>関連する公式情報</h2>{''.join(links)}<p style="font-size:12px;color:#607388">※ BLUE COURTは非公式ファンメディアです。試合日程・料金・募集内容は公式サイトで最新情報をご確認ください。</p></div><a class="post-back" href="../#journal">← 記事一覧へ戻る</a></article></main>
+<main><section class="post-hero"><div class="wrap"><a href="../#journal">← BLUE COURT JOURNAL</a><p class="post-meta">{published} ／ {escape(post["category"])}</p><h1>{title}</h1><p>{summary}</p></div></section><article class="post-content">{hero_html}{body}<div class="post-sources"><h2>関連する公式情報</h2>{''.join(links)}<p style="font-size:12px;color:#607388">※ BLUE COURTは非公式ファンメディアです。試合日程・料金・募集内容は公式サイトで最新情報をご確認ください。</p></div><a class="post-back" href="../#journal">← 記事一覧へ戻る</a></article></main>
 <footer class="footer"><div class="wrap"><a class="footer-brand" href="../">BLUE COURT<span>.</span></a><p>JFL・Y.S.C.C.横浜サッカー独立観戦メディア。クラブ公式サイトではありません。</p></div></footer></body></html>'''
 
 def generate() -> None:

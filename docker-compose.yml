@@ -1,0 +1,53 @@
+# BLUE COURT blog automation.
+#   docker compose run --rm publish     … generate today's article once
+#   docker compose up -d scheduler      … keep publishing every day at PUBLISH_AT
+#   docker compose up -d preview        … read the site at http://localhost:8099/
+# PREVIEW_PORT in .env moves the preview if 8099 is taken on the host.
+services:
+  publish:
+    build:
+      context: .
+      dockerfile: automation/Dockerfile
+    image: blue-court-automation
+    # Write generated files as the host user, not root: root-owned articles in
+    # the working tree block the next local edit and the next git operation.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SITE_ROOT: /app
+      HOME: /tmp
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
+    volumes:
+      - ./:/app
+      - ./secrets:/secrets:ro
+    command: ["python", "-m", "automation.app.run_once"]
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: automation/Dockerfile
+    image: blue-court-automation
+    restart: unless-stopped
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SITE_ROOT: /app
+      HOME: /tmp
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
+    volumes:
+      - ./:/app
+      - ./secrets:/secrets:ro
+    command: ["python", "-m", "automation.app.scheduler"]
+
+  preview:
+    image: python:3.12-slim
+    working_dir: /site
+    ports:
+      - "${PREVIEW_PORT:-8099}:8000"
+    volumes:
+      - ./:/site:ro
+    command: ["python", "-m", "http.server", "8000"]

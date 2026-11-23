@@ -25,3 +25,9 @@
 @media(max-width:900px){.next-match-inner strong{font-size:47px}.next-match-inner p{font-size:15px}.ticket-promo{align-items:flex-start}.ticket-promo .btn{min-width:170px;gap:12px}.hero-en{font-size:clamp(74px,9.1vw,120px)}}
 @media(max-width:780px){.hero-copy{padding-top:56px}.hero-en{font-size:clamp(78px,14.5vw,120px)}.next-match-inner{align-items:flex-start}.next-match-inner .btn{min-width:0}.ticket-promo{flex-direction:column}.next-match-inner strong{font-size:45px}}
 @media(max-width:540px){.hero-en{font-size:clamp(70px,16.5vw,100px)}.hero-copy{padding-top:42px}.next-match-inner{flex-direction:column;padding:26px 0}.next-match-inner strong{font-size:49px}.next-match-inner strong span{display:block;margin-top:6px}.next-match-inner p{font-size:17px}.next-match-inner .btn{width:100%}.ticket-promo{padding:24px 21px}.ticket-promo .btn{width:100%}.play-art-one>span{font-size:85px}.play-art-two>span{font-size:100px}.venue-art strong{font-size:21px}}
+
+/* Daily journal cards that carry a Google Drive photo (automation/app/drive_photos.py). */
+.article-visual.has-photo{padding:0;display:block;background:#06152c}
+.article-visual.has-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.article-visual.has-photo small{position:absolute;left:16px;bottom:14px;z-index:2;background:#081b36d9;padding:6px 10px}
+.article-visual.has-photo:after{content:none}

@@ -1,2 +1,10 @@
 public/
 __pycache__/
+# 秘密情報は一度コミットすると履歴から復元できてしまう。先に除外する。
+.env
+.env.*
+!.env.example
+# secrets/ はディレクトリごと除外すると中の README も復元できないため、
+# ワイルドカードで中身を除外してから README だけ戻す。
+secrets/*
+!secrets/README.md
