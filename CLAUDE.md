@@ -38,6 +38,13 @@
   `grep -r` は `.gitignore` 対象を外すので、秘密情報の点検には `command grep -r` を使う。
 - **コンテナはリポジトリに直接書き込む。** `.env` の `HOST_UID` / `HOST_GID` をホストの
   `id -u` / `id -g` に合わせないと、生成ファイルがroot所有になって以降の操作が失敗する。
+- **テストを公開ディレクトリに書かせない。** `export_site()` のテストは `SITE_ROOT` だけでなく
+  **`SITE_EXPORT_DIR` も差し替える**。差し替え忘れると publish コンテナの `/public`
+  （= `/var/www/yscc`）へ偽のファイルを書き出し、**公開中のサイトを壊す**。2026-11-23に実際に
+  起き、`index.html` が13バイトの `<html></html>`、`blog/` が `a.html` 1本だけになった。
+  しかも検査対象が公開先になるため**テストは緑のまま通る**。
+  `automation/tests/test_writer.py` の `ExportSiteTest` は書き出し先が一時ディレクトリで
+  あること自体を検査する（`assertEqual(target, export)`）。ここを外すと落ちる。
 - CSSは `styles.css`（元デザイン）と `football.css`（サッカー版の上書き）の2枚。
   **新しい色・角丸・影を発明しない。** 既存の変数（`:root` の `--navy` 等）を使う。
 

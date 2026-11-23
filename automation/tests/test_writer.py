@@ -173,17 +173,28 @@ class WriteTodayTest(unittest.TestCase):
 
 
 class ExportSiteTest(unittest.TestCase):
+    # SITE_EXPORT_DIR も必ず差し替える。SITE_ROOT だけ差し替えると、公開先の既定値
+    # （コンテナでは /public = /var/www/yscc）へ偽のファイルを書き出し、**公開中のサイトを
+    # 壊す**。2026-11-23に実際に起き、index.html が 13バイトの "<html></html>" に、
+    # blog/ が a.html 1本だけになった。しかも検査対象が公開先だったため、テストは緑のまま
+    # 通っていた（偽のファイルが「コピーされた」ので assert が満たされてしまう）。
     def test_copies_public_files_and_leaves_secrets_behind(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp) / "repo"
+            root.mkdir()
+            export = Path(tmp) / "public"
             (root / "index.html").write_text("<html></html>", encoding="utf-8")
-            (root / ".env").write_text("ANTHROPIC_API_KEY=must-not-be-published", encoding="utf-8")
+            (root / ".env").write_text("OPENAI_API_KEY=must-not-be-published", encoding="utf-8")
             (root / "secrets").mkdir()
             (root / "secrets" / "key.json").write_text("{}", encoding="utf-8")
             (root / "blog").mkdir()
             (root / "blog" / "a.html").write_text("a", encoding="utf-8")
-            with mock.patch.object(config, "SITE_ROOT", root):
+            with mock.patch.object(config, "SITE_ROOT", root), \
+                 mock.patch.object(config, "SITE_EXPORT_DIR", export):
                 target = publisher.export_site()
+            # 書き出し先が差し替えた一時ディレクトリであること自体を検査する。
+            # ここを見ていないと、公開先へ書いていても気づけない。
+            self.assertEqual(target, export)
             self.assertTrue((target / "index.html").exists())
             self.assertTrue((target / "blog" / "a.html").exists())
             self.assertFalse((target / ".env").exists())
