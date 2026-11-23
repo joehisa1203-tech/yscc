@@ -65,7 +65,12 @@ docker compose logs --tail=20 scheduler
      push先の `joehisa1203-tech/yscc` でも動く。
   2. **Dockerアプリ** `automation/` … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`。
      Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。pushは `origin` へ。
-- VPS上にGoogle Driveのサービスアカウント鍵は無い（2026-11-23に全体を検索して確認）。
+- **Driveのサービスアカウント鍵を配置済み**（2026-11-23、利用者から受領）。
+  `secrets/google-service-account.json`（権限600・git管理外）。Drive APIの認証は通る。
+  - プロジェクト: `blog-515607` ／ アカウント: `blog-774@blog-515607.iam.gserviceaccount.com`
+  - **写真フォルダをこのアドレスに「閲覧者」で共有し、`.env` の `GDRIVE_FOLDER_ID` を
+    記入すると写真付きになる**（翌日の記事から）。共有前はこのアカウントから見える
+    ファイルが0件なので、写真は付かない。
   `JOE/SNS運用` のDrive連携はOAuth（利用者がブラウザで同意する方式）で、
   ヘッドレスのコンテナからは使えない。ycss用に新規作成が必要。
 - 自動テスト: `automation/tests/`（14件）。Driveの認証情報なしで動く。
