@@ -12,9 +12,16 @@
 
 ## 稼働状態（2026-11-23 時点）
 
-- **記事の執筆はClaude（`claude-opus-5-5`）に切り替え済み。ただしキー未設定のため、
-  いまは手書き24本のローテーションで動いている。** `.env` に `ANTHROPIC_API_KEY` を
-  書いた翌日から本文が毎日変わる。
+- **記事の執筆はClaude（`claude-opus-5-5`）に切り替え済み。キーは設定したが、
+  Anthropicアカウントのクレジット残高が不足していて呼び出せない**（HTTP 400
+  "credit balance is too low"）。そのため、いまは手書き24本のローテーションで動いている。
+  **クレジットを購入すれば、設定変更なしで翌日から本文が毎日変わる。**
+  - 使っている鍵: `/home/ubuntu/JOE/geotool/.env` の `GEO_TOOL_CLAUDE_API_KEY`（2026-11-23に流用。
+    sha256先頭 `2cacb5a4`）。形式は正しく、認証は通る。
+  - `/home/ubuntu/JOE/HP-wordpress/backend/.env` の `ANTHROPIC_API_KEY`（sha256先頭 `968bc4f1`、
+    長さ106・`sk-ant-api03-` 形式ではない）は **401 invalid x-api-key** で使えなかった。
+    HP-wordpress側のAI機能も同じ鍵なら動いていない可能性がある（未調査・別案件）。
+  - 毎日1回だけ失敗して手書きに落ちるだけなので、残高が無い間も公開は止まらない。
 - **GitHub Actions は検証専用にした（コミットもpushもしない）。** publisher はVPSの1本だけ。
   2026-11-23にpush時のActionsがコミットしてVPSのクローンと食い違ったため、
   `publish.yml` からコミット処理を外し、権限も `contents: read` に落とした。
@@ -54,6 +61,9 @@ docker compose logs --tail=20 scheduler
      push先の `joehisa1203-tech/yscc` でも動く。
   2. **Dockerアプリ** `automation/` … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`。
      Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。pushは `origin` へ。
+- VPS上にGoogle Driveのサービスアカウント鍵は無い（2026-11-23に全体を検索して確認）。
+  `JOE/SNS運用` のDrive連携はOAuth（利用者がブラウザで同意する方式）で、
+  ヘッドレスのコンテナからは使えない。ycss用に新規作成が必要。
 - 自動テスト: `automation/tests/`（14件）。Driveの認証情報なしで動く。
   2026-11-23時点で、EXIF除去とヒーロー画像のパス検証をわざと壊して落ちることを確認済み。
 
@@ -70,12 +80,17 @@ docker compose logs --tail=20 scheduler
 
 ### 利用者（本人）にしかできないこと
 
-1. **Google Cloud のサービスアカウント作成とJSON鍵の配置**（`secrets/google-service-account.json`）、
+1. **Anthropicのクレジット購入**（https://console.anthropic.com/ → Plans & Billing）。
+   claude.aiのサブスクリプション（Pro/Max）とAPIの課金は別。APIはクレジットが必要。
+   購入後は何も設定しなくてよい（翌日の10:10から本文がLLM製になる）。
+   費用の目安: `claude-opus-5-5` で月30本・約150円、`claude-haiku-5-5` なら約3円
+   （`.env` の `ANTHROPIC_MODEL` を変えるだけ）。
+2. **Google Cloud のサービスアカウント作成とJSON鍵の配置**（`secrets/google-service-account.json`）、
    写真フォルダの共有設定、`.env` の `GDRIVE_FOLDER_ID` 記入。手順は `docs/automation.md`。
-2. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
-3. **push資格情報の用意**（`GIT_PUSH=1` で運用する場合）。SSH鍵かcredential helperのマウント。
-4. **Dockerを常時動かすホストの決定。** scheduler は動かし続けないと毎日公開しない。
-5. **Renderの接続先切り替え（公開サイトに反映したい場合）。** 現在Renderは旧 `softrenzu/ycss` を
+3. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
+4. **push資格情報の用意**（`GIT_PUSH=1` で運用する場合）。SSH鍵かcredential helperのマウント。
+5. **Dockerを常時動かすホストの決定。** scheduler は動かし続けないと毎日公開しない。
+6. **Renderの接続先切り替え（旧URLを使い続けたい場合のみ）。** 現在Renderは旧 `softrenzu/ycss` を
    見ているため、このリポジトリの変更はサイトに出ない。切り替える場合は、`scripts/daily_blog.py` の
    `BASE`（現在 `https://blue-court-yscc.onrender.com/`）とcanonical・og:url・sitemapのURLも
    新しい公開URLに合わせる必要がある。切り替えないなら、このリポジトリは記事と自動化アプリの
