@@ -8,3 +8,5 @@ __pycache__/
 # ワイルドカードで中身を除外してから README だけ戻す。
 secrets/*
 !secrets/README.md
+# 公開用の生成物（publisher が作り直す）
+site/

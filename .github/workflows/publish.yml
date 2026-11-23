@@ -1,11 +1,13 @@
 name: Publish daily YSCC football blog
 
+# 毎日の投稿はこのVPSのコンテナ（automation/）が行う。Actionsのcronを残すと
+# 同時刻に両方が投稿を試み、先にActionsがコミットした日はVPS側のpushが
+# non-fast-forwardで拒否され、以後ずっと失敗し続ける。写真とLLM本文はVPS側に
+# しかないため、Actionsが勝つとその日の記事は写真なし・テンプレ本文になる。
+# ここは検証と手動実行のためだけに残す。
 on:
   push:
     branches: [main]
-  schedule:
-    # GitHub cron is UTC: 01:10 UTC = 10:10 JST every day.
-    - cron: '10 1 * * *'
   workflow_dispatch:
 
 permissions:

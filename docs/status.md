@@ -12,6 +12,14 @@
 
 ## 稼働状態（2026-11-23 時点）
 
+- **記事の執筆はClaude（`claude-opus-5-5`）に切り替え済み。ただしキー未設定のため、
+  いまは手書き24本のローテーションで動いている。** `.env` に `ANTHROPIC_API_KEY` を
+  書いた翌日から本文が毎日変わる。
+- **GitHub Actions の毎日実行（cron）は停止した。** publisher はVPSの1本だけ。
+  push時の検証と手動実行（workflow_dispatch）は残してある。
+- **暫定の公開URL: `http://210.131.216.216:8099/`**（VPSの `preview` サービス、`site/` のみ配信）。
+  独自ドメイン（`yscc.joeai.co.jp` は別サーバーで使用中のため要相談）とTLSは未設定。
+
 - **このVPS（`x210-131-216-216`）で scheduler を常時起動済み**。
   `ycss-scheduler-1` / `restart: unless-stopped`（VPS再起動後も復帰）。次回実行は毎日 10:10 JST。
 - `.env` 作成済み（git管理外）。`GIT_PUSH=1`、push先は remote `origin`（`joehisa1203-tech/yscc`）。
@@ -71,6 +79,13 @@ docker compose logs --tail=20 scheduler
 - **公開経路（Actions / Dockerアプリ）を1つに寄せる判断は保留。** 同じ日に二重投稿はしない
   （日付で判定）ため、当面は併存で問題が出ない。寄せるなら、Dockerに寄せる場合は
   `.github/workflows/publish.yml` の `schedule:` を外し、Actionsに寄せる場合はDockerを手動実行にする。
+
+### 未着手（判断済みで手が付いていないもの）
+
+- **独自ドメインの決定。** `yscc.joeai.co.jp` は別サーバー（162.43.101.99）で
+  WordPressが稼働中。差し替えるとそのサイトがURLで届かなくなる。新規サブドメイン
+  （例 `blue-court.joeai.co.jp`）なら影響なし。DNS変更は利用者の作業。
+  決まったら `.env` の `SITE_BASE_URL` を変え、nginx vhostとLet's Encryptを設定する。
 
 ### 未着手
 

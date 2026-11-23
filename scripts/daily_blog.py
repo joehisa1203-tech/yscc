@@ -18,7 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT
 POSTS = SITE / "data" / "posts.json"
 ARTICLES = SITE / "blog"
-BASE = "https://blue-court-yscc.onrender.com/"
+# 公開URL。独自ドメインへ移すときは SITE_BASE_URL だけ変える（canonical・og:url・
+# sitemap・記事ページのURLがすべてここから作られる）。末尾のスラッシュは必須。
+BASE = os.environ.get("SITE_BASE_URL", "https://blue-court-yscc.onrender.com/")
+if not BASE.endswith("/"):
+    BASE += "/"
 OFFICIAL = "https://www.yscc1986.net/"
 TICKET = "https://ticket.yscc1986.net/"
 JFL = "https://www.jfl.or.jp/jfl-pc/view/s.php?a=2591&f=2026A001_spc.html"

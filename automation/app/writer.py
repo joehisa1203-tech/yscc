@@ -1,0 +1,163 @@
+"""Write one day's article with the Claude API, or refuse to.
+
+Why a writer at all: scripts/daily_blog.py rotates 24 hand-written tips, so the
+same body text returns every 24 days. The LLM gives a different article daily.
+
+Why it can refuse: this is a fan site, and the first rule of the project is that
+no match result, attendance figure, ticket availability, player quote or
+recruitment detail may be invented. A model cannot know those, so anything that
+looks like one is treated as a defect and the article is thrown away — the
+caller then falls back to the hand-written rotation. A plain blog that repeats
+itself is a small problem; a fan site inventing a scoreline is not.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+
+MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
+MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
+CATEGORIES = ("観戦ガイド", "クラブを知る", "横浜の街")
+
+SYSTEM = """あなたはY.S.C.C.横浜（日本フットボールリーグ=JFLに所属するサッカークラブ）の
+非公式ファンメディア「BLUE COURT」の編集者です。ホームゲームの観客を増やすために、
+読者が「次の週末にスタジアムへ行ってみよう」と思える短い記事を日本語で書きます。
+
+絶対に守ること（破った記事は破棄されます）:
+- 試合結果・スコア・順位・得点者を書かない。あなたは試合を見ていません。
+- 観客数・来場者数を書かない。
+- チケットの料金・残席・発売状況を書かない。「公式サイトで確認」と案内する。
+- 選手・監督・クラブ関係者のコメントや発言を作らない。
+- スクールやイベントの募集条件・日程・定員を作らない。
+- クラブ公式を装わない。「独立したファンメディア」として書く。
+- フットサル（F.LEAGUE）の話題を混ぜない。このメディアは11人制サッカー専門です。
+- 具体的な数字（人数・金額・点数）を新しく作らない。
+
+書き方:
+- 読者は「サッカーをあまり見たことがない横浜の人」です。専門用語には短い説明を添える。
+- 煽らない。感嘆符を多用しない。断定できないことは断定しない。
+- 観戦の楽しみ方、スタジアムでの過ごし方、サッカーの見どころ、横浜の街、
+  クラブの成り立ちなど、調べなくても書ける普遍的な話題を選ぶ。
+- 事実関係が必要なところは「公式サイトの最新情報を確認してください」と書く。"""
+
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string", "enum": list(CATEGORIES)},
+        "title": {"type": "string", "description": "記事の見出し。20〜40文字程度。日付は含めない"},
+        "summary": {"type": "string", "description": "一覧に出る要約。40〜80文字程度"},
+        "body": {
+            "type": "array",
+            "description": "本文の段落。3〜4段落。各段落80〜200文字程度",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 4,
+        },
+    },
+    "required": ["category", "title", "summary", "body"],
+    "additionalProperties": False,
+}
+
+# 検出したら記事を捨てる表現。右側はログに出す理由。
+BANNED = [
+    (r"\d+\s*[-−–―ー]\s*\d+", "スコアのような数字の並び"),
+    (r"\d+\s*点", "得点の記述"),
+    (r"\d+\s*人", "人数（観客数）の記述"),
+    (r"\d+\s*円", "料金の記述"),
+    (r"観客数|来場者数|入場者数", "観客数の記述"),
+    (r"残席|完売|売り切れ|売切|即完", "チケット在庫の記述"),
+    (r"勝利し|勝っ|敗れ|敗戦|引き分け|黒星|白星", "試合結果の記述"),
+    (r"語った|話した|述べた|とコメント|の談話", "関係者コメントの捏造"),
+    (r"募集中|募集し|定員|申込締切", "募集条件の記述"),
+    (r"優勝|昇格が決|降格が決", "順位の確定情報"),
+    (r"フットサル|F\.LEAGUE|ysccfutsal", "フットサルの混入"),
+    (r"公式(サイト|メディア|アカウント)です", "公式を装う表現"),
+]
+
+
+def configured() -> bool:
+    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+
+
+def status() -> str:
+    """Why the writer is off, without printing any key material."""
+    if not configured():
+        return "ANTHROPIC_API_KEY is not set"
+    return f"configured (model {MODEL})"
+
+
+def check(article: dict, recent_titles: list[str]) -> list[str]:
+    """Return every reason this article must not be published. Empty = publishable."""
+    problems: list[str] = []
+    category = article.get("category")
+    if category not in CATEGORIES:
+        problems.append(f"カテゴリーが規定外: {category!r}")
+    title = str(article.get("title", ""))
+    summary = str(article.get("summary", ""))
+    body = article.get("body") or []
+    if not 10 <= len(title) <= 70:
+        problems.append(f"タイトルの長さが範囲外: {len(title)}文字")
+    if not 20 <= len(summary) <= 140:
+        problems.append(f"要約の長さが範囲外: {len(summary)}文字")
+    if not isinstance(body, list) or not 3 <= len(body) <= 4:
+        problems.append(f"段落数が範囲外: {len(body) if isinstance(body, list) else type(body)}")
+    else:
+        for index, paragraph in enumerate(body, 1):
+            if not isinstance(paragraph, str) or not 40 <= len(paragraph) <= 400:
+                problems.append(f"{index}段落目の長さが範囲外")
+    if title in recent_titles or any(title in t for t in recent_titles):
+        problems.append("最近の記事と同じタイトル")
+    text = "\n".join([title, summary, *[p for p in body if isinstance(p, str)]])
+    for pattern, reason in BANNED:
+        found = re.search(pattern, text)
+        if found:
+            problems.append(f"{reason}（該当: {found.group(0)!r}）")
+    return problems
+
+
+def build_prompt(date: str, recent_titles: list[str]) -> str:
+    recent = "\n".join("- " + t for t in recent_titles[:20]) or "- （まだありません）"
+    return f"""{date}（日本時間）に公開する記事を1本書いてください。
+
+直近に公開した記事のタイトル（内容と切り口が重ならないようにしてください）:
+{recent}
+
+出力はスキーマどおりのJSONのみ。タイトルに日付は入れないでください。"""
+
+
+def write_article(date: str, recent_titles: list[str], client=None) -> dict | None:
+    """One Claude API call. Returns a checked article, or None (caller falls back)."""
+    if not configured():
+        print(f"[LLM] skipped: {status()}")
+        return None
+    if client is None:
+        import anthropic  # imported here so the container runs without a key
+        client = anthropic.Anthropic()
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=SYSTEM,
+            messages=[{"role": "user", "content": build_prompt(date, recent_titles)}],
+            output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
+        )
+    except Exception as error:  # an API outage must not stop the blog
+        print(f"[LLM] call failed, falling back to the written rotation: {error}")
+        return None
+    if getattr(response, "stop_reason", None) not in ("end_turn", "stop_sequence"):
+        print(f"[LLM] unusable stop_reason={getattr(response, 'stop_reason', None)!r}")
+        return None
+    try:
+        text = next(b.text for b in response.content if b.type == "text")
+        article = json.loads(text)
+    except (StopIteration, ValueError, AttributeError) as error:
+        print(f"[LLM] could not read the response: {error}")
+        return None
+    problems = check(article, recent_titles)
+    if problems:
+        for problem in problems:
+            print(f"[LLM] rejected: {problem}")
+        return None
+    print(f"[LLM] wrote: {article['title']}")
+    return article

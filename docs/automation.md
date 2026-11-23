@@ -4,7 +4,9 @@
 
 `automation/` は、BLUE COURT の毎日ブログを **Dockerコンテナ1つで** 公開するアプリです。
 
-1. `scripts/daily_blog.py` でその日（JST）の記事を1本生成する
+1. その日（JST）の記事を1本用意する
+   - `ANTHROPIC_API_KEY` があれば **Claudeが書く**（`automation/app/writer.py`）
+   - 無い・失敗した・禁止表現が出た場合は `scripts/daily_blog.py` の手書き24本から選ぶ
 2. Google Drive のフォルダから **まだ使っていない写真を1枚** 取り出し、記事のヒーロー画像にする
 3. 記事ページ・`sitemap.xml` を作り直す
 4. （任意）git commit → push して Render の自動デプロイを起こす
@@ -26,6 +28,38 @@
 - **EXIFを必ず落とす。** カメラやスマホの写真にはGPS座標や端末情報が入っています。このリポジトリは公開です。
   `automation/tests/test_automation.py::HeroImageTest::test_drops_camera_and_gps_metadata` が番をしています。
 - **スケジューラは「JSTの時刻」を狙う。** 参考元は「24時間ごと」にスリープするため、再起動すると投稿時刻がずれていきます。
+
+## 記事の執筆（LLM）
+
+`automation/app/writer.py` が Claude API を **1日1回だけ** 呼びます。
+
+- 既定モデルは `claude-opus-5-5`（`ANTHROPIC_MODEL` で変更可。`claude-haiku-5-5` は
+  10分の1以下の費用で、毎日1本の短い記事なら実用的）
+- 出力は JSON Schema で固定（`category` / `title` / `summary` / `body[3-4]`）
+- **禁止表現チェックを通らない記事は捨てる。** 判定は `writer.BANNED`:
+  スコア・得点・人数・金額・観客数・チケット在庫・試合結果・関係者コメント・
+  募集条件・順位確定・フットサル・公式を装う表現。最近のタイトルとの重複も弾く
+- 捨てた場合・APIが落ちた場合・キーが無い場合は **手書き24本にフォールバック**する
+
+**なぜ捨てる設計か。** モデルは試合結果も観客数も知りません。それでも書けてしまうため、
+「書かせない」だけでは不十分で「出さない」が必要です。重複した記事が出る損害より、
+ファンサイトが架空のスコアを載せる損害のほうが大きい、という判断です。
+`automation/tests/test_writer.py` が番をしており、`writer.BANNED` から検出パターンを
+1つ削ると該当テストが落ちます（2026-11-23に確認済み）。
+
+## 公開用ディレクトリ
+
+`publisher.export_site()` が `site/` に **公開してよいファイルだけ** を複製します
+（`PUBLIC_FILES` / `PUBLIC_DIRS` の許可リスト）。拒否リストにしていないのは、
+ファイルが増えたときに漏らさないためです。
+
+**リポジトリのディレクトリをそのままWebサーバーに向けないこと。** `.env` が
+`https://.../.env` で読めてしまい、APIキーとDrive設定が漏れます。`preview` サービスは
+`site/` だけをマウントしています。
+
+```bash
+docker compose up -d preview     # http://<このホスト>:8099/（PREVIEW_BIND=127.0.0.1 で内側だけに）
+```
 
 ## 使い方
 
@@ -73,6 +107,11 @@ docker compose run --rm --entrypoint python publish -c "from automation.app impo
 | `PHOTO_CREDIT` | 空 | 写真の下に出すクレジット。空なら出さない |
 | `PHOTO_WIDTH` / `PHOTO_HEIGHT` / `PHOTO_QUALITY` | 1600 / 900 / 82 | 書き出しサイズと画質 |
 | `PHOTO_REUSE` | `1` | 全部使い切った後に古い写真を再利用するか。`0` なら写真なしで継続 |
+| `ANTHROPIC_API_KEY` | 空 | 設定するとClaudeが本文を書く。空なら手書き24本 |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5` | 執筆モデル |
+| `LLM_MAX_TOKENS` | `2000` | 1記事あたりの出力上限 |
+| `SITE_BASE_URL` | onrenderのURL | canonical・og:url・sitemap・記事URLの基点 |
+| `PREVIEW_BIND` | `0.0.0.0` | `preview` の待ち受け。`127.0.0.1` で外部非公開 |
 | `PUBLISH_AT` | `10:10` | scheduler が毎日動く **JST** の時刻 |
 | `RUN_AT_START` | `1` | scheduler 起動直後にも1回公開するか |
 | `GIT_PUSH` | `0` | `1` でコミットとpushを行う |
