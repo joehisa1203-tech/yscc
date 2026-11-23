@@ -15,8 +15,13 @@
 - **記事の執筆はClaude（`claude-opus-5-5`）に切り替え済み。ただしキー未設定のため、
   いまは手書き24本のローテーションで動いている。** `.env` に `ANTHROPIC_API_KEY` を
   書いた翌日から本文が毎日変わる。
-- **GitHub Actions の毎日実行（cron）は停止した。** publisher はVPSの1本だけ。
-  push時の検証と手動実行（workflow_dispatch）は残してある。
+- **GitHub Actions は検証専用にした（コミットもpushもしない）。** publisher はVPSの1本だけ。
+  2026-11-23にpush時のActionsがコミットしてVPSのクローンと食い違ったため、
+  `publish.yml` からコミット処理を外し、権限も `contents: read` に落とした。
+- **公開サイトの検証を中身で行うようにした**（`scripts/check_live_site.py`）。
+  記事の日付が当日以上か、`.env` 等が公開されていないかを見る。古いサイト（onrender）に
+  向けると落ちることを確認済み。以前の「トップページに 'JFL 2026' があるか」だけの
+  検査は、別リポジトリ由来の古いサイトでも緑になっていた。
 - **公開URL: https://joeai.co.jp/yscc/** （このVPSのnginx、`/var/www/yscc` を静的配信、TLSは
   既存の joeai.co.jp 証明書）。WordPress（`https://joeai.co.jp/`）は変更前と同じ応答を確認済み。
   nginx設定の退避先は `/etc/nginx/sites-available/hp.bak-20261123-before-yscc`。

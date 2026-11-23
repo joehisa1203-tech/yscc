@@ -1,17 +1,16 @@
-name: Publish daily YSCC football blog
+name: Validate daily blog generation
 
-# 毎日の投稿はこのVPSのコンテナ（automation/）が行う。Actionsのcronを残すと
-# 同時刻に両方が投稿を試み、先にActionsがコミットした日はVPS側のpushが
-# non-fast-forwardで拒否され、以後ずっと失敗し続ける。写真とLLM本文はVPS側に
-# しかないため、Actionsが勝つとその日の記事は写真なし・テンプレ本文になる。
-# ここは検証と手動実行のためだけに残す。
+# 投稿するのはこのVPSのコンテナ（automation/）だけ。ここは「記事生成が壊れて
+# いないか」を見る検証専用で、コミットもpushもしない。
+# 2026-11-23: push時にActionsがコミットしてVPSのクローンと食い違った。
+# publisherが2つあると、片方のpushが拒否され続ける状態に必ず行き着く。
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: blue-court-daily-blog
@@ -43,16 +42,3 @@ jobs:
             exit 1
           fi
           python -c 'import datetime,json,zoneinfo; today=datetime.datetime.now(zoneinfo.ZoneInfo("Asia/Tokyo")).date().isoformat(); posts=json.load(open("data/posts.json",encoding="utf-8"))["posts"]; assert any(p["date"]==today for p in posts), "No article for " + today; print("Validated article for",today)'
-      - name: Commit new article files
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add data/posts.json blog sitemap.xml
-          if ! git diff --cached --quiet; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'content: publish YSCC daily football journal'
-            git push
-          else
-            echo 'Today is already published; no duplicate post.'
-          fi

@@ -17,8 +17,9 @@
 
 ## このリポジトリ固有の地雷
 
-- **毎日の投稿はVPSのコンテナが行う。`.github/workflows/publish.yml` に `schedule:` を戻さない。**
-  同時刻に両方が投稿すると、先にActionsがコミットした日はVPS側のpushが拒否され、以後ずっと失敗する。
+- **毎日の投稿はVPSのコンテナが行う。Actionsは検証専用。**
+  `.github/workflows/publish.yml` に `schedule:` やコミット処理を戻さない。
+  publisherが2つあると、片方のpushが拒否され続ける状態に必ず行き着く（2026-11-23に実際に発生）。
 - **Webサーバーにリポジトリのディレクトリを向けない。** `.env` が公開される。
   公開は `site/`（`publisher.export_site()` の許可リスト）だけ。
 - **LLMが書いた本文は禁止表現チェックで捨てられる。** 判定は `automation/app/writer.py` の

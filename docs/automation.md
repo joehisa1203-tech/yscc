@@ -124,6 +124,16 @@ nginx（www-data）が辿れないためです。パーミッションを緩め�
 置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
 作っているので本来入っていませんが、二重にしています）。
 
+## 公開状態の確認
+
+```bash
+python3 scripts/check_live_site.py                 # 既定は https://joeai.co.jp/yscc/
+python3 scripts/check_live_site.py <別のURL>       # 引数で切り替え
+```
+
+当日の記事が配信されているかと、`.env` などが公開されていないかを**中身で**確認します。
+GitHub Actions（`site-smoke-test.yml`）も同じスクリプトを使います。
+
 ## 使い方
 
 ```bash
