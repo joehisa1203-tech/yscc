@@ -29,20 +29,25 @@
   2026-11-23にpush時のActionsがコミットしてVPSのクローンと食い違ったため、
   `publish.yml` からコミット処理を外し、権限も `contents: read` に落とした。
 - **公開サイトの検証を中身で行うようにした**（`scripts/check_live_site.py`）。
-  記事の日付が当日以上か、`.env` 等が公開されていないかを見る。古いサイト（onrender）に
-  向けると落ちることを確認済み。以前の「トップページに 'JFL 2026' があるか」だけの
-  検査は、別リポジトリ由来の古いサイトでも緑になっていた。
-- **公開URL: https://joeai.co.jp/yscc/** （このVPSのnginx、`/var/www/yscc` を静的配信、TLSは
-  既存の joeai.co.jp 証明書）。WordPress（`https://joeai.co.jp/`）は変更前と同じ応答を確認済み。
-  nginx設定の退避先は `/etc/nginx/sites-available/hp.bak-20261123-before-yscc`。
-  暫定で開けていた 8099 は `127.0.0.1` に閉じた。
-- サブディレクトリ公開のため `/yscc/robots.txt` はクローラーに読まれない（ドメイン直下だけが有効）。
-  サイトマップは `https://joeai.co.jp/yscc/sitemap.xml` を直接登録する。
-  **この制約は下記のドメイン移行で解消する。**
-- **https://yscc.joeai.co.jp/ への移行中（2026-11-23 利用者が決定）。**
-  vhostは作成・検証済み（Hostヘッダ直叩きで記事・JSON・CSSが200、`.env` や `.git` は404、
-  既存5サイトに影響なしを確認）。**DNSのAレコード変更（利用者の作業）を待っている段階。**
-  手順と現在地の表は `docs/automation.md` の「yscc.joeai.co.jp への移行」。
+  記事の日付が当日以上か、`.env` 等が公開されていないかを見る。以前の「トップページに
+  'JFL 2026' があるか」だけの検査は、別リポジトリ由来の古いサイトでも緑になっていた。
+  - **わざと落として確認する方法:** `CHECK_ATTEMPTS=1 python3 scripts/check_live_site.py
+    https://joeai.co.jp/`（記事が無いURL）で終了コード1になる。2026-11-23に確認済み。
+    `CHECK_ATTEMPTS` を付けないと浸透待ちで30秒×10回かかる。
+  - 旧 Render（`blue-court-yscc.onrender.com`）は**落とす材料に使えない**。旧リポジトリ側の
+    Actionsが今も毎日投稿しているため、当日の記事が存在して緑になる。
+- **公開URL: https://yscc.joeai.co.jp/ （2026-11-23に移行完了）。** このVPSのnginxが
+  `/var/www/yscc` を静的配信。TLSは Let's Encrypt（`yscc.joeai.co.jp`、2027-02-21まで、
+  certbotが自動更新）。構成は `docs/automation.md`。
+  - 利用者がXserverでAレコードを `162.43.101.99` → `210.131.216.216` に変更。これにより
+    **別サーバーで動いていたWordPress「yscc」はこのURLでは届かなくなった**（中身は別サーバーに残存）。
+  - 旧URL `https://joeai.co.jp/yscc/` は**301で新URLへ飛ばすだけ**にした（配信は1か所）。
+    記事の個別URLも `/yscc/blog/x.html` → `/blog/x.html` に対応付けて追跡確認済み。
+  - 独立ドメインになったので **`robots.txt` が有効になった**（サブパス時代は無視されていた）。
+    サイトマップは `https://yscc.joeai.co.jp/sitemap.xml`。
+  - WordPress（`https://joeai.co.jp/`）と `geo` / `sns` / `reply` は移行前と同じ応答を確認済み。
+  - nginx設定の退避先: `/home/ubuntu/backups/nginx-20261123-232831.tar.gz`（展開して差分一致を確認）、
+    `/home/ubuntu/backups/hp.bak-*-before-301`。暫定で開けていた 8099 は `127.0.0.1` に閉じた。
 
 - **このVPS（`x210-131-216-216`）で scheduler を常時起動済み**。
   `ycss-scheduler-1` / `restart: unless-stopped`（VPS再起動後も復帰）。次回実行は毎日 10:10 JST。
@@ -62,7 +67,7 @@ docker compose logs --tail=20 scheduler
 
 ## 動いているもの
 
-- 公開サイト: https://joeai.co.jp/yscc/ （このVPSのnginxが `/var/www/yscc` を配信）
+- 公開サイト: https://yscc.joeai.co.jp/ （このVPSのnginxが `/var/www/yscc` を配信）
 - 毎日ブログ: `scripts/daily_blog.py` が JST の日付ごとに記事を1本生成。同じ日の二重投稿はしない。
 - **記事を作って公開するのはVPSのコンテナ1本だけ**（`automation/`、毎日 `PUBLISH_AT`）。
   LLMが本文を書き、Driveの写真を付け、`/var/www/yscc` へ複製し、`origin` へpushする。
@@ -100,15 +105,12 @@ docker compose logs --tail=20 scheduler
 
 ### 利用者（本人）にしかできないこと
 
-1. **DNSのAレコード変更（ドメイン移行の要）。** `yscc.joeai.co.jp` を
-   `162.43.101.99` → **`210.131.216.216`** に変更する。DNSは **Xserver**（`ns1〜5.xserver.jp`）で
-   管理されているので、Xserverの管理画面で操作する。
-   - 変えると、別サーバーで動いているWordPress「yscc」はこのURLで届かなくなる（中身は残る）。
-   - 浸透後に `sudo SITE_EXPORT_DIR=/var/www/yscc bash deploy/setup_nginx.sh yscc.joeai.co.jp`
-     を実行すると証明書まで進む（残りはこちらの作業）。
-2. **サッカー写真のDriveフォルダの用意。** `blog-774@blog-515607.iam.gserviceaccount.com` に
+1. **サッカー写真のDriveフォルダの用意。** `blog-774@blog-515607.iam.gserviceaccount.com` に
    閲覧者で共有し、`.env` の `GDRIVE_FOLDER_ID` を記入する。手順は `docs/automation.md`。
-3. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
+2. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
+3. **別サーバーのWordPress「yscc」の後始末（任意）。** DNSを向け替えたので
+   `yscc.joeai.co.jp` では届かないが、162.43.101.99 側では動き続けている。
+   不要なら停止・削除する。残しても公開サイトには影響しない。
 
 ### 見送った判断（理由ごと残す）
 
@@ -119,6 +121,8 @@ docker compose logs --tail=20 scheduler
   権限を `contents: read` に落とした。**publisherを2つに戻さない。**
 - **新規サブドメイン（`blue-court.joeai.co.jp` 等）の取得は見送った**（2026-11-23）。
   既にDNSに登録済みの `yscc.joeai.co.jp` を向け替えるほうが、利用者の操作が1回で済むため。
+- **旧URL（`joeai.co.jp/yscc/`）での配信は残さない。** 2か所で配ると canonical と実体が
+  食い違い、どちらが正かわからなくなる。301だけを返す。
 
 ### 未着手
 

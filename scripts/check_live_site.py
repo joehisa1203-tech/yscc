@@ -20,7 +20,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else
-        os.environ.get("SITE_BASE_URL", "https://joeai.co.jp/yscc/")).rstrip("/") + "/"
+        os.environ.get("SITE_BASE_URL", "https://yscc.joeai.co.jp/")).rstrip("/") + "/"
 PRIVATE = (".env", "secrets/google-service-account.json", "automation/app/config.py")
 ATTEMPTS = int(os.environ.get("CHECK_ATTEMPTS", "10"))
 

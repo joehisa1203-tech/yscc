@@ -19,4 +19,4 @@ jobs:
       # 以前はトップページに 'JFL 2026' があるかだけを見ていたため、別リポジトリ由来の
       # 古いサイトでも緑になり「公開できている」と誤読させていた。
       - name: Verify the live site
-        run: python3 scripts/check_live_site.py "${SITE_BASE_URL:-https://joeai.co.jp/yscc/}"
+        run: python3 scripts/check_live_site.py "${SITE_BASE_URL:-https://yscc.joeai.co.jp/}"

@@ -72,78 +72,53 @@ docker compose up -d preview     # http://<このホスト>:8099/（PREVIEW_BIND
 
 ## いまの公開構成（2026-11-23〜）
 
-**https://joeai.co.jp/yscc/** で公開しています。既存の `joeai.co.jp`（WordPress）と同じ
-nginx vhost にサブパスを1つ足した形で、DNSの変更は不要でした。
+**https://yscc.joeai.co.jp/** で公開しています。このVPSのnginxが `/var/www/yscc` を静的配信し、
+TLSは Let's Encrypt（certbot が自動更新）。Render も GitHub Pages も使いません。**pushを待たずに、
+記事ができた時点で公開されます。**
 
 ```
-/etc/nginx/sites-available/hp
-  location ^~ /yscc/   → root /var/www;   （= /var/www/yscc を静的配信）
-  location = /yscc     → 301 /yscc/
-  location /           → WordPress（127.0.0.1:8080）※従来どおり
+/etc/nginx/sites-available/yscc.joeai.co.jp   ← 本体（certbot が443を追記済み）
+  root /var/www/yscc;  location / → try_files
+
+/etc/nginx/sites-available/hp （joeai.co.jp = WordPress）
+  location ^~ /yscc/ → 301 https://yscc.joeai.co.jp/$1    ← 旧URL。配信はしない
+  location = /yscc   → 301 https://yscc.joeai.co.jp/
 ```
 
-- `.env` の `SITE_PUBLIC_DIR=/var/www/yscc`、`SITE_BASE_URL=https://joeai.co.jp/yscc/`
-- 変更前の設定は `/etc/nginx/sites-available/hp.bak-20261123-before-yscc` に退避済み。
-  戻すときは `sudo cp -a` で上書きして `sudo systemctl reload nginx`
-- `location ^~` は正規表現ロケーションを飛ばすため、隠しファイルの遮断を内側にも置いている
-- 暫定で開けていた 8099 は `PREVIEW_BIND=127.0.0.1` で内側に閉じた
+- `.env` は `SITE_PUBLIC_DIR=/var/www/yscc`、`SITE_BASE_URL=https://yscc.joeai.co.jp/`
+- **旧URLで配信を続けない。** 2か所で配ると canonical と実体が食い違い、どちらが正かわからなく
+  なる。`hp` の `location ^~ /yscc/` は301だけを返す形に置き換えた（元の設定は
+  `/home/ubuntu/backups/hp.bak-*-before-301`）。
+- `SITE_PUBLIC_DIR` を `/home/ubuntu` の外に置くのは、`/home/ubuntu` が `drwxr-x---` で
+  nginx（www-data）が辿れないためです。パーミッションを緩めるより、公開物だけを
+  `/var/www` に置くほうが安全です。
+- 独立したドメインになったので **`robots.txt` が有効**（サブパス時代は無視されていた）。
+  サイトマップは `https://yscc.joeai.co.jp/sitemap.xml`。
 
-**サブディレクトリ公開の制約:** `robots.txt` はドメイン直下（`https://joeai.co.jp/robots.txt`）
-しか読まれないため、`/yscc/robots.txt` はクローラーに無視されます。いまはWordPress側の
-robots.txtが効いています。検索エンジンにはサイトマップURL
-（`https://joeai.co.jp/yscc/sitemap.xml`）を直接登録してください。独自サブドメインに
-移せばこの制約は無くなります。
+### vhostの作り直し・別ドメインへの移設
 
-## yscc.joeai.co.jp への移行（進行中・2026-11-23〜）
-
-サブパス（`joeai.co.jp/yscc/`）から **https://yscc.joeai.co.jp/** へ移します。独立させると
-`robots.txt` が効き、WordPressのvhostの事故がこのサイトに波及しなくなります。
-
-**順番が大事です。DNSが先、証明書が後。** Let's Encryptはドメインに80番で接続して所有確認を
-するため、DNSが向いていないと証明書が取れません。
-
-| 段階 | 誰が | 内容 | 状態 |
-|---|---|---|---|
-| 1 | こちら | vhostを作り、Hostヘッダで直叩きして配信を確認 | **完了** |
-| 2 | 利用者 | DNSのAレコードを `162.43.101.99` → `210.131.216.216` に変更 | 未 |
-| 3 | こちら | 証明書の取得、`SITE_BASE_URL` の変更、旧URLからの301 | 未 |
-
-段階1と3は同じコマンドで、何度実行してもよい（冪等）。DNSがこのホストを向くまでは
-証明書の手前で止まります。
+`deploy/setup_nginx.sh` は何度実行してもよい（冪等）。TLS設定済みのvhostは上書きしません。
 
 ```bash
 sudo SITE_EXPORT_DIR=/var/www/yscc bash deploy/setup_nginx.sh yscc.joeai.co.jp
 ```
 
-- vhostは `/etc/nginx/sites-available/yscc.joeai.co.jp`。元の設定は
-  `/home/ubuntu/backups/nginx-<日時>.tar.gz` に退避済み（展開して差分一致を確認済み）。
+**順番が大事です。DNSが先、証明書が後。** Let's Encryptはドメインに80番で接続して所有確認を
+するため、DNSが向いていないと証明書が取れません。スクリプトはDNSがこのホスト
+（`210.131.216.216`）を向いていなければ証明書の手前で止まり、HTTP配信の準備だけを終えます。
+
 - 設定の中身は `deploy/nginx/blue-court.conf.template`。既存サイトの作法に合わせ、隠しファイルと
   置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
   作っているので本来入っていませんが、二重にしています）。
 - **reloadの直後に配信確認をすると古い設定が応答する。** スクリプトは200が返るまで
   最大10秒待ちます。待たずに叩いて、他のvhostが返した404を「配信できていない」と
   誤判定した（2026-11-23）。
-
-**DNS切り替えで何が起きるか:** `yscc.joeai.co.jp` には現在、別サーバー（162.43.101.99、
-Xserver）でWordPress（`noindex` 付き・タイトル「yscc」）が動いています。Aレコードを
-変えると**そのサイトはこのURLで届かなくなります**（中身は消えません。別サーバーに残ります）。
-
-段階3でやること:
-
-```
-SITE_BASE_URL=https://yscc.joeai.co.jp/
-```
+- ドメインを変えたら `.env` の `SITE_BASE_URL` も変えて再生成する（canonical・og:image・
+  sitemap・robots がここから作られる）。
 
 ```bash
 docker compose up -d --force-recreate scheduler && docker compose run --rm publish
 ```
-
-`SITE_PUBLIC_DIR` は `/var/www/yscc` のまま変えません。`/home/ubuntu` の外に置くのは、
-`/home/ubuntu` が `drwxr-x---` で nginx（www-data）が辿れないためです。パーミッションを
-緩めるより、公開物だけを `/var/www` に置くほうが安全です。
-
-あわせて `hp` vhost の `location ^~ /yscc/` を **新URLへの301に置き換えます**（配信を2か所に
-残さない。残すと canonical と実体が食い違い、どちらが正かわからなくなる）。
 
 ## `.env` を変えたときの反映
 
@@ -157,7 +132,7 @@ docker compose up -d --force-recreate scheduler
 ## 公開状態の確認
 
 ```bash
-python3 scripts/check_live_site.py                 # 既定は https://joeai.co.jp/yscc/
+python3 scripts/check_live_site.py                 # 既定は https://yscc.joeai.co.jp/
 python3 scripts/check_live_site.py <別のURL>       # 引数で切り替え
 ```
 

@@ -2,7 +2,7 @@
 
 目的は、Y.S.C.C.横浜の **サッカートップチーム（JFL）** のホームゲーム観客増加と、公式のクラブ情報・スポーツ参加への導線づくりです。横浜エクセレンス向けサイトの「試合 → 観戦ガイド → チケット → 毎日ブログ」という情報設計を参考にしています。
 
-公開サイト: https://joeai.co.jp/yscc/ （旧: https://blue-court-yscc.onrender.com/ ＝ 旧リポジトリ由来のため更新されません）
+公開サイト: https://yscc.joeai.co.jp/
 
 GitHub: https://github.com/joehisa1203-tech/yscc （push先はここだけ。`softrenzu/ycss` へは push しない）
 

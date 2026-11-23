@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT
 POSTS = SITE / "data" / "posts.json"
 ARTICLES = SITE / "blog"
-# 公開URL。独自ドメインへ移すときは SITE_BASE_URL だけ変える（canonical・og:url・
+# 公開URL。移すときは SITE_BASE_URL だけ変える（canonical・og:image・
 # sitemap・記事ページのURLがすべてここから作られる）。末尾のスラッシュは必須。
 BASE = os.environ.get("SITE_BASE_URL", "https://blue-court-yscc.onrender.com/")
 if not BASE.endswith("/"):
