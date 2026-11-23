@@ -12,7 +12,7 @@
 
 ## 稼働状態（2026-11-23 時点）
 
-- **記事の執筆はClaude（`claude-opus-5-5`）に切り替え済み。キーは設定したが、
+- **記事の執筆はClaude（`claude-haiku-5-5`）に切り替え済み。キーは設定したが、
   Anthropicアカウントのクレジット残高が不足していて呼び出せない**（HTTP 400
   "credit balance is too low"）。そのため、いまは手書き24本のローテーションで動いている。
   **クレジットを購入すれば、設定変更なしで翌日から本文が毎日変わる。**
@@ -83,8 +83,8 @@ docker compose logs --tail=20 scheduler
 1. **Anthropicのクレジット購入**（https://console.anthropic.com/ → Plans & Billing）。
    claude.aiのサブスクリプション（Pro/Max）とAPIの課金は別。APIはクレジットが必要。
    購入後は何も設定しなくてよい（翌日の10:10から本文がLLM製になる）。
-   費用の目安: `claude-opus-5-5` で月30本・約150円、`claude-haiku-5-5` なら約3円
-   （`.env` の `ANTHROPIC_MODEL` を変えるだけ）。
+   費用の目安: 運用中の `claude-haiku-5-5` なら月30本で約3円。
+   品質を上げたい場合は `.env` の `ANTHROPIC_MODEL` を `claude-opus-5-5` に変える（約150円）。
 2. **Google Cloud のサービスアカウント作成とJSON鍵の配置**（`secrets/google-service-account.json`）、
    写真フォルダの共有設定、`.env` の `GDRIVE_FOLDER_ID` 記入。手順は `docs/automation.md`。
 3. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。

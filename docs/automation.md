@@ -33,8 +33,9 @@
 
 `automation/app/writer.py` が Claude API を **1日1回だけ** 呼びます。
 
-- 既定モデルは `claude-opus-5-5`（`ANTHROPIC_MODEL` で変更可。`claude-haiku-5-5` は
-  10分の1以下の費用で、毎日1本の短い記事なら実用的）
+- **運用中のモデルは `claude-haiku-5-5`**（`.env` の `ANTHROPIC_MODEL`。コード側の既定値は
+  `claude-opus-5-5`）。毎日1本の短い記事なのでHaikuで足りる。月30本で約3円。
+  品質を上げたいときは `.env` を `claude-opus-5-5` に変えて `docker compose restart scheduler`
 - 出力は JSON Schema で固定（`category` / `title` / `summary` / `body[3-4]`）
 - **禁止表現チェックを通らない記事は捨てる。** 判定は `writer.BANNED`:
   スコア・得点・人数・金額・観客数・チケット在庫・試合結果・関係者コメント・
@@ -181,7 +182,7 @@ docker compose run --rm --entrypoint python publish -c "from automation.app impo
 | `PHOTO_WIDTH` / `PHOTO_HEIGHT` / `PHOTO_QUALITY` | 1600 / 900 / 82 | 書き出しサイズと画質 |
 | `PHOTO_REUSE` | `1` | 全部使い切った後に古い写真を再利用するか。`0` なら写真なしで継続 |
 | `ANTHROPIC_API_KEY` | 空 | 設定するとClaudeが本文を書く。空なら手書き24本 |
-| `ANTHROPIC_MODEL` | `claude-opus-5-5` | 執筆モデル |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5`（運用値は `claude-haiku-5-5`） | 執筆モデル |
 | `LLM_MAX_TOKENS` | `2000` | 1記事あたりの出力上限 |
 | `SITE_BASE_URL` | onrenderのURL | canonical・og:url・sitemap・記事URLの基点 |
 | `PREVIEW_BIND` | `0.0.0.0` | `preview` の待ち受け。`127.0.0.1` で外部非公開 |
