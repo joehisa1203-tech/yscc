@@ -43,6 +43,7 @@
 ## 確認コマンド
 
 ```bash
+docker compose up -d --force-recreate scheduler  # .env を変えたとき（restartでは反映されない）
 docker compose run --rm publish                  # 今日の記事を生成
 docker compose run --rm --entrypoint python publish -m unittest discover -s automation/tests -t .
 docker compose up -d preview                     # http://localhost:8099/

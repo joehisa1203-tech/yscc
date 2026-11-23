@@ -122,7 +122,7 @@ SITE_BASE_URL=https://<ドメイン>/
 ```
 
 ```bash
-docker compose restart scheduler && docker compose run --rm publish
+docker compose up -d --force-recreate scheduler && docker compose run --rm publish
 ```
 
 `SITE_PUBLIC_DIR` を `/home/ubuntu` の外に出すのは、`/home/ubuntu` が `drwxr-x---` で
@@ -132,6 +132,15 @@ nginx（www-data）が辿れないためです。パーミッションを緩め�
 設定は `deploy/nginx/blue-court.conf.template`。既存サイトの作法に合わせ、隠しファイルと
 置き忘れファイルは404にして `blocked.log` に記録します（公開ディレクトリは許可リストで
 作っているので本来入っていませんが、二重にしています）。
+
+## `.env` を変えたときの反映
+
+```bash
+docker compose up -d --force-recreate scheduler
+```
+
+**`docker compose restart` では反映されません。** 環境変数はコンテナ生成時に固定されるため、
+`restart` は古い値のまま動き続けます（2026-11-23に実際にこれで取り違えた）。
 
 ## 公開状態の確認
 

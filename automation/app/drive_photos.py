@@ -142,9 +142,20 @@ def fetch_photo_for(date: str) -> dict | None:
     """Download and store one photo for `date`. Returns hero metadata or None."""
     folder_id = extract_folder_id(config.GDRIVE_FOLDER_ID)
     service = build_service()
+    # 共有されていないフォルダは list が空を返すだけなので、「0枚」と
+    # 「そもそも届いていない」が区別できない。先にフォルダ自体を引く。
+    try:
+        folder = service.files().get(
+            fileId=folder_id, fields="id,name", supportsAllDrives=True
+        ).execute()
+    except Exception as error:
+        print("[DRIVE] フォルダに届きません。サービスアカウントへの共有を確認してください: "
+              f"{str(error)[:120]}")
+        return None
     images = list_images(service, folder_id)
-    print(f"[DRIVE] {len(images)} images under the folder")
+    print(f"[DRIVE] folder {folder.get('name')!r}: {len(images)} images")
     if not images:
+        print("[DRIVE] フォルダは見えていますが画像がありません（JPEG/PNG/WebP/HEICのみ対象）")
         return None
     ledger = load_ledger()
     picked = choose(images, ledger)

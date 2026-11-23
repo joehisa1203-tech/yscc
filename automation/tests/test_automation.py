@@ -121,6 +121,7 @@ class FetchPhotoTest(unittest.TestCase):
             buffer = io.BytesIO()
             raw.save(buffer, format="JPEG")
             service = FakeService({"root": [[photo("a", "yokohama.jpg", "1")]]})
+            service.files().get = lambda **kwargs: mock.Mock(execute=lambda: {"id": "root", "name": "写真"})
             with mock.patch.object(config, "PHOTO_DIR", root / "assets" / "photos"), \
                  mock.patch.object(config, "PHOTO_LEDGER", root / "data" / "photos.json"), \
                  mock.patch.object(config, "GDRIVE_FOLDER_ID", "rootfolderid"), \
@@ -134,6 +135,21 @@ class FetchPhotoTest(unittest.TestCase):
             self.assertTrue((root / "assets" / "photos" / "2026-11-23-hero.jpg").exists())
             ledger = json.loads((root / "data" / "photos.json").read_text(encoding="utf-8"))
             self.assertEqual(ledger["photos"][0]["fileId"], "a")
+
+
+class FolderAccessTest(unittest.TestCase):
+    def test_reports_an_unreachable_folder_instead_of_zero_images(self):
+        # 共有されていないフォルダは list が空を返すだけなので、0枚と区別できないと
+        # 「写真が1枚も無い」と誤読する（2026-11-23に実際に誤読した）。
+        class Boom:
+            def get(self, **kwargs):
+                raise RuntimeError("HttpError 404 File not found")
+
+        service = mock.Mock(files=lambda: Boom())
+        with mock.patch.object(config, "GDRIVE_FOLDER_ID", "x" * 20), \
+             mock.patch.object(drive_photos, "build_service", lambda: service), \
+             mock.patch.object(drive_photos, "extract_folder_id", lambda _v: "nope"):
+            self.assertIsNone(drive_photos.fetch_photo_for("2026-11-24"))
 
 
 class AttachPhotoTest(unittest.TestCase):
