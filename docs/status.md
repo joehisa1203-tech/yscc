@@ -116,9 +116,6 @@ docker compose logs --tail=20 scheduler
 1. **サッカー写真のDriveフォルダの用意。** `blog-774@blog-515607.iam.gserviceaccount.com` に
    閲覧者で共有し、`.env` の `GDRIVE_FOLDER_ID` を記入する。手順は `docs/automation.md`。
 2. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
-3. **別サーバーのWordPress「yscc」の後始末（任意）。** DNSを向け替えたので
-   `yscc.joeai.co.jp` では届かないが、162.43.101.99 側では動き続けている。
-   不要なら停止・削除する。残しても公開サイトには影響しない。
 
 ### 見送った判断（理由ごと残す）
 
@@ -131,6 +128,10 @@ docker compose logs --tail=20 scheduler
   既にDNSに登録済みの `yscc.joeai.co.jp` を向け替えるほうが、利用者の操作が1回で済むため。
 - **旧URL（`joeai.co.jp/yscc/`）での配信は残さない。** 2か所で配ると canonical と実体が
   食い違い、どちらが正かわからなくなる。301だけを返す。
+- **別サーバー（162.43.101.99、Xserver）のWordPress「yscc」はそのまま残す**（2026-11-23に
+  利用者が決定）。DNSを向け替えたので `yscc.joeai.co.jp` では届かないが、あちらのサーバーでは
+  動き続けている。**公開サイトには影響しない**ため、停止・削除はしない。
+  再提案しないこと。もしDNSを元に戻せば、あのWordPressが再びこのURLで見える。
 
 ### 未着手
 
