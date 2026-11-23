@@ -65,6 +65,15 @@ docker compose logs --tail=20 scheduler
      push先の `joehisa1203-tech/yscc` でも動く。
   2. **Dockerアプリ** `automation/` … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`。
      Google Driveの写真つき。`GIT_PUSH=1` のときだけpushする（既定はoff）。pushは `origin` へ。
+- **全経路の通し試験を実施（2026-11-23 17:00 JST）。** schedulerが時刻どおりに起動し、
+  LLMが本文を書き、Driveから写真を取り、ページ生成→push→公開サイト反映まで1回で通った。
+  ログ: `[LLM] wrote: ...` → `[DRIVE] folder 'つくば写真': 24 images` →
+  `[DRIVE] saved ... (205 KB)` → `[GIT] pushed`。公開サイトで写真つき記事を確認。
+  - 試験後、**テスト写真は記事・リポジトリ・台帳から削除し、`GDRIVE_FOLDER_ID` も空に戻した**
+    （この写真は民泊・不動産の物件写真で、サッカーの記事に載せる内容ではないため）。
+  - つまり**残っているのはサッカー写真のフォルダを用意することだけ**。フォルダIDを
+    `.env` に入れて `docker compose up -d --force-recreate scheduler` すれば写真つきになる。
+
 - **Driveのサービスアカウント鍵を配置済み**（2026-11-23、利用者から受領）。
   `secrets/google-service-account.json`（権限600・git管理外）。Drive APIの認証は通る。
   - プロジェクト: `blog-515607` ／ アカウント: `blog-774@blog-515607.iam.gserviceaccount.com`
