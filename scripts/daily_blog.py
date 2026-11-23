@@ -147,6 +147,11 @@ def generate() -> None:
         xml += "<url><loc>" + escape(url) + "</loc><lastmod>" + changed + "</lastmod></url>\n"
     xml += "</urlset>\n"
     (SITE / "sitemap.xml").write_text(xml, encoding="utf-8")
+    # robots.txt のSitemap行もBASEから作る。手書きのままだとドメインを移したときに
+    # 古いURLを指し続ける（実際に onrender のURLが残っていた）。
+    (SITE / "robots.txt").write_text(
+        "User-agent: *\nAllow: /\nSitemap: " + BASE + "sitemap.xml\n", encoding="utf-8"
+    )
     print("BLUE COURT: " + str(len(posts)) + " articles built; latest " + today)
 
 if __name__ == "__main__":

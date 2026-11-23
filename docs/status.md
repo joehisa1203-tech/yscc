@@ -17,8 +17,12 @@
   書いた翌日から本文が毎日変わる。
 - **GitHub Actions の毎日実行（cron）は停止した。** publisher はVPSの1本だけ。
   push時の検証と手動実行（workflow_dispatch）は残してある。
-- **暫定の公開URL: `http://210.131.216.216:8099/`**（VPSの `preview` サービス、`site/` のみ配信）。
-  独自ドメイン（`yscc.joeai.co.jp` は別サーバーで使用中のため要相談）とTLSは未設定。
+- **公開URL: https://joeai.co.jp/yscc/** （このVPSのnginx、`/var/www/yscc` を静的配信、TLSは
+  既存の joeai.co.jp 証明書）。WordPress（`https://joeai.co.jp/`）は変更前と同じ応答を確認済み。
+  nginx設定の退避先は `/etc/nginx/sites-available/hp.bak-20261123-before-yscc`。
+  暫定で開けていた 8099 は `127.0.0.1` に閉じた。
+- サブディレクトリ公開のため `/yscc/robots.txt` はクローラーに読まれない（ドメイン直下だけが有効）。
+  サイトマップは `https://joeai.co.jp/yscc/sitemap.xml` を直接登録する。
 
 - **このVPS（`x210-131-216-216`）で scheduler を常時起動済み**。
   `ycss-scheduler-1` / `restart: unless-stopped`（VPS再起動後も復帰）。次回実行は毎日 10:10 JST。
@@ -82,9 +86,10 @@ docker compose logs --tail=20 scheduler
 
 ### 未着手（判断済みで手が付いていないもの）
 
-- **独自ドメインの決定。** `yscc.joeai.co.jp` は別サーバー（162.43.101.99）で
-  WordPressが稼働中。差し替えるとそのサイトがURLで届かなくなる。新規サブドメイン
-  （例 `blue-court.joeai.co.jp`）なら影響なし。DNS変更は利用者の作業。
+- **独自サブドメインへ移すかどうか（任意）。** いまは `joeai.co.jp/yscc/` で動いている。
+  移すと robots.txt が有効になり、WordPressのvhostから独立する。`yscc.joeai.co.jp` は
+  別サーバー（162.43.101.99）でWordPressが稼働中なので、`blue-court.joeai.co.jp` 等の
+  新規サブドメインを使う。DNS変更は利用者の作業。
   決まったら `sudo bash deploy/setup_nginx.sh <ドメイン>` を実行し、`.env` の
   `SITE_PUBLIC_DIR` と `SITE_BASE_URL` を変える。設定ファイルとスクリプトは用意済み
   （`deploy/`）。nginx 1.28.3・certbot導入済みで、`geo` / `reply` / `sns` など

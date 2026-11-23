@@ -1,6 +1,7 @@
 # BLUE COURT（Y.S.C.C.横浜 JFL応援メディア）
 
-静的サイト + 毎日ブログ自動生成。
+静的サイト + 毎日ブログ自動生成。公開URLは **https://joeai.co.jp/yscc/**
+（このVPSのnginxが `/var/www/yscc` を配信。WordPressと同じvhost `hp` にサブパスを追加）。
 
 **push先は `joehisa1203-tech/yscc`（remote `origin`）だけ。** 旧 `softrenzu/ycss` は remote
 `softrenzu` として参照用に残し、push URLを無効化してある。Renderは旧リポジトリを見ているため、

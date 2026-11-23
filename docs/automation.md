@@ -61,7 +61,31 @@
 docker compose up -d preview     # http://<このホスト>:8099/（PREVIEW_BIND=127.0.0.1 で内側だけに）
 ```
 
-## 独自ドメインで公開する（nginx + Let's Encrypt）
+## いまの公開構成（2026-11-23〜）
+
+**https://joeai.co.jp/yscc/** で公開しています。既存の `joeai.co.jp`（WordPress）と同じ
+nginx vhost にサブパスを1つ足した形で、DNSの変更は不要でした。
+
+```
+/etc/nginx/sites-available/hp
+  location ^~ /yscc/   → root /var/www;   （= /var/www/yscc を静的配信）
+  location = /yscc     → 301 /yscc/
+  location /           → WordPress（127.0.0.1:8080）※従来どおり
+```
+
+- `.env` の `SITE_PUBLIC_DIR=/var/www/yscc`、`SITE_BASE_URL=https://joeai.co.jp/yscc/`
+- 変更前の設定は `/etc/nginx/sites-available/hp.bak-20261123-before-yscc` に退避済み。
+  戻すときは `sudo cp -a` で上書きして `sudo systemctl reload nginx`
+- `location ^~` は正規表現ロケーションを飛ばすため、隠しファイルの遮断を内側にも置いている
+- 暫定で開けていた 8099 は `PREVIEW_BIND=127.0.0.1` で内側に閉じた
+
+**サブディレクトリ公開の制約:** `robots.txt` はドメイン直下（`https://joeai.co.jp/robots.txt`）
+しか読まれないため、`/yscc/robots.txt` はクローラーに無視されます。いまはWordPress側の
+robots.txtが効いています。検索エンジンにはサイトマップURL
+（`https://joeai.co.jp/yscc/sitemap.xml`）を直接登録してください。独自サブドメインに
+移せばこの制約は無くなります。
+
+## 独自サブドメインへ移す場合（nginx + Let's Encrypt）
 
 このVPSのnginxで配ります。Render も GitHub Pages も使いません。**pushを待たずに、記事ができた
 時点で公開されます。**
@@ -80,7 +104,8 @@ sudo bash deploy/setup_nginx.sh <ドメイン>
 
    DNSがこのホストを向いていなければ、何も変更せずに中断します。
 
-3. **（こちら）`.env` を2行変えて再起動**
+3. **（こちら）`.env` を2行変えて再起動**（サブパスからの引っ越しなら、
+   `location ^~ /yscc/` を新URLへの301リダイレクトに置き換える）
 
 ```
 SITE_PUBLIC_DIR=/var/www/blue-court

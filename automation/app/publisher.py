@@ -138,7 +138,7 @@ def commit_and_push(date: str) -> None:
         return
     git("config", "user.name", config.GIT_AUTHOR_NAME)
     git("config", "user.email", config.GIT_AUTHOR_EMAIL)
-    git("add", "data", "blog", "sitemap.xml", "assets")
+    git("add", "data", "blog", "sitemap.xml", "robots.txt", "assets")
     staged = subprocess.run(
         ["git", "-C", str(config.SITE_ROOT), "diff", "--cached", "--quiet"]
     )
