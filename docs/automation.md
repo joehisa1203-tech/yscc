@@ -166,6 +166,17 @@ docker compose run --rm --entrypoint python publish -m unittest discover -s auto
    **閲覧者** で共有する。
 5. `.env` の `GDRIVE_FOLDER_ID` にフォルダIDかフォルダURLを書く。
 
+**共有ドライブ（Shared Drive）も使えます。** `0A` で始まるIDは共有ドライブのものです。
+`list_images` が `supportsAllDrives` / `includeItemsFromAllDrives` を付けているため、
+通常のフォルダと同じように扱えます。共有ドライブの場合は「共有」ではなく
+**ドライブのメンバーにサービスアカウントを追加**します。
+
+**正方形や縦長の画像は端が切れます。** 1600×900へ中央で切り出すため、文字入りの告知画像は
+上下が欠けます。写真向けの設計なので、文字が主役の画像には向きません。
+
+**`PHOTO_REUSE=1` のまま枚数が少ないと、同じ画像が毎日出ます。** 使い切ったあとに古い順で
+再利用するためです。1枚だけ載せて終わりにしたいときは `PHOTO_REUSE=0`。
+
 サブフォルダも再帰的に探します。JPEG / PNG / WebP / HEIC を対象にし、それ以外（ドキュメント等）は無視します。
 
 **いま使っているアカウント（2026-11-27〜）:** プロジェクト `yscc-blog` ／
