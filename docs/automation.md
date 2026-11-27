@@ -168,6 +168,29 @@ docker compose run --rm --entrypoint python publish -m unittest discover -s auto
 
 サブフォルダも再帰的に探します。JPEG / PNG / WebP / HEIC を対象にし、それ以外（ドキュメント等）は無視します。
 
+**いま使っているアカウント（2026-11-27〜）:** プロジェクト `yscc-blog` ／
+`yscc-blog-reader@yscc-blog.iam.gserviceaccount.com`。フォルダはこのアドレスに共有します。
+
+**共有は鍵ではなくアカウント単位です。** 鍵を新しくしてもアカウントが変われば、
+前のアカウントに共有していたフォルダは見えません（`files.list` が0件になる）。
+鍵を差し替えたら、フォルダの共有先も新しいアドレスに直します。
+
+**鍵は2つ並べて持ちません。** どちらが使われているか分からなくなるため、差し替えるときは
+古い鍵を `/home/ubuntu/backups/` へ退避してから `secrets/google-service-account.json` を
+置き換えます（`GOOGLE_APPLICATION_CREDENTIALS` はこのパス固定）。
+
+### 手元のPCから鍵をVPSへ送る
+
+このリポジトリはVPS上にあるので、PCのダウンロードフォルダは見えません。PC側から送ります。
+
+```bash
+scp -i ~/.ssh/<鍵> <鍵のJSON> ubuntu@210.131.216.216:/home/ubuntu/BLOG/ycss/secrets/
+```
+
+`-i` に渡すのは**秘密鍵**（`.pub` が付かないほう）。送り先のファイル名は変えず、
+動作確認のあとに `google-service-account.json` へ差し替えます。稼働中の鍵を直接
+上書きすると、新しい鍵で認証が通らなかったときに戻せません。
+
 **鍵の値をチャットやissueに貼らないこと。** 設定できているかは次で確認できます（値は表示されません）。
 
 ```bash

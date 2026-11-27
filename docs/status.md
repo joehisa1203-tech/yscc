@@ -84,12 +84,20 @@ docker compose logs --tail=20 scheduler
   - つまり**残っているのはサッカー写真のフォルダを用意することだけ**。フォルダIDを
     `.env` に入れて `docker compose up -d --force-recreate scheduler` すれば写真つきになる。
 
-- **Driveのサービスアカウント鍵を配置済み**（2026-11-23、利用者から受領）。
-  `secrets/google-service-account.json`（権限600・git管理外）。Drive APIの認証は通る。
-  - プロジェクト: `blog-515607` ／ アカウント: `blog-774@blog-515607.iam.gserviceaccount.com`
+- **Driveのサービスアカウント鍵を配置済み**（2026-11-27に専用プロジェクトの鍵へ差し替え、
+  利用者から受領）。`secrets/google-service-account.json`（権限600・git管理外）。
+  - プロジェクト: `yscc-blog` ／ **アカウント: `yscc-blog-reader@yscc-blog.iam.gserviceaccount.com`**
+  - 認証とDrive APIの呼び出しは実機確認済み（トークン取得成功、`files.list` が200で0件）。
+    **0件は「まだ共有されていない」状態で、鍵としては正常。**
   - **写真フォルダをこのアドレスに「閲覧者」で共有し、`.env` の `GDRIVE_FOLDER_ID` を
-    記入すると写真付きになる**（翌日の記事から）。共有前はこのアカウントから見える
-    ファイルが0件なので、写真は付かない。
+    記入すると写真付きになる**（翌日の記事から）。
+  - **共有は鍵ではなくアカウント単位。** 鍵を入れ替えただけでは見えるファイルは0件のまま。
+    古いアカウント（`blog-774@blog-515607...`）に共有していたフォルダがあれば、
+    新しいアドレスに共有し直す必要がある。
+  - 旧鍵（プロジェクト `blog-515607`）は**退避して置き換えた。鍵を2つ並べて持たない**
+    （どちらが使われているか分からなくなる）。退避先:
+    `/home/ubuntu/backups/google-service-account.json.bak-20261127-221607-blog-515607`。
+    不要になったらGoogle Cloud側で無効化するとよい（利用者の作業）。
   `JOE/SNS運用` のDrive連携はOAuth（利用者がブラウザで同意する方式）で、
   ヘッドレスのコンテナからは使えない。ycss用に新規作成が必要。
 - **テストが公開サイトを壊す事故があった（2026-11-23・修復済み）。** `export_site()` のテストが
@@ -116,8 +124,9 @@ docker compose logs --tail=20 scheduler
 
 ### 利用者（本人）にしかできないこと
 
-1. **サッカー写真のDriveフォルダの用意。** `blog-774@blog-515607.iam.gserviceaccount.com` に
-   閲覧者で共有し、`.env` の `GDRIVE_FOLDER_ID` を記入する。手順は `docs/automation.md`。
+1. **サッカー写真のDriveフォルダの用意。** `yscc-blog-reader@yscc-blog.iam.gserviceaccount.com` に
+   閲覧者で共有し、フォルダIDを伝える（`.env` への記入はこちらで行う）。
+   手順は `docs/automation.md`。
 2. **公開する写真の権利確認。** Driveに入れた写真はそのまま記事に載る。
 
 ### 見送った判断（理由ごと残す）
