@@ -77,11 +77,15 @@ class ChooseTest(unittest.TestCase):
         ledger = {"photos": [{"fileId": "a", "date": "2026-11-20"}]}
         self.assertEqual(drive_photos.choose(images, ledger)["id"], "b")
 
+    # PHOTO_REUSE は必ず明示する。既定値に頼ると、運用中の `.env` が PHOTO_REUSE=0 の
+    # ときにこのテストだけが落ちる（2026-11-27に実際に起きた）。テストは環境変数で
+    # 結果が変わってはいけない。
     def test_reuses_the_oldest_when_everything_was_published(self):
         images = [photo("a", "a.jpg", "1"), photo("b", "b.jpg", "2")]
         ledger = {"photos": [{"fileId": "a", "date": "2026-11-20"},
                              {"fileId": "b", "date": "2026-11-21"}]}
-        self.assertEqual(drive_photos.choose(images, ledger)["id"], "a")
+        with mock.patch.object(config, "PHOTO_REUSE", True):
+            self.assertEqual(drive_photos.choose(images, ledger)["id"], "a")
 
     def test_returns_nothing_when_reuse_is_disabled(self):
         images = [photo("a", "a.jpg", "1")]
