@@ -1,3 +1,11 @@
 {
-  "photos": []
+  "photos": [
+    {
+      "fileId": "1LsCyAK-F23-9m5DZtJMVur4Mb7rpyMlS",
+      "driveName": "ネクストマッチ.png",
+      "date": "2026-11-27",
+      "src": "assets/photos/2026-11-27-hero.jpg",
+      "fetchedAt": "2026-11-27T13:27:05+00:00"
+    }
+  ]
 }
