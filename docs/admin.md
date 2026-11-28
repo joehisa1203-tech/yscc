@@ -1,6 +1,6 @@
 # 管理画面と半自動公開
 
-2026-11-28 に、毎日の記事を「自動で公開」から「自動で下書き → 管理者が公開ボタン」に変えた。
+2026-11-28 に（同日本番反映）、毎日の記事を「自動で公開」から「自動で下書き → 管理者が公開ボタン」に変えた。
 このファイルはその設計・理由・運用手順。
 
 ## 流れ
@@ -108,20 +108,27 @@ docker compose run --rm publish            # 今日の下書きを今すぐ作�
   古いコード（自動公開）のまま動く。
 - 画面の確認は手元に https が無いので、`ADMIN_COOKIE_SECURE=0` の一時コンテナで行う
   （2026-11-28 はサンドボックスのnginx＋adminで、ログイン→下書き→写真→公開→非公開を確認した）。
+- **ログイン画面は POST だけをログイン試行として数える。** GET/HEAD を数えると、死活監視の
+  HEAD で失敗回数が増え、正しい利用者が締め出される（2026-11-28 反映時に発見・修正）。
 - **非公開にしても GitHub の履歴には残る。** リポジトリが公開なので完全には消えない。
   画面の確認ページにも書いてある。
 
-### nginx の設定（本番へ足す部分）
+### nginx の設定
 
-`deploy/nginx/blue-court.conf.template` の `location ^~ /admin/` と同じものを、本番の
-`/etc/nginx/sites-available/yscc.joeai.co.jp` の `location / {` の前に足す。
+本番の `/etc/nginx/sites-available/yscc.joeai.co.jp` の `location / {` の前に、
+`deploy/nginx/blue-court.conf.template` と同じ `location ^~ /admin/` を入れてある（2026-11-28）。
+vhost を作り直すときはテンプレートと突き合わせる。
 `deploy/setup_nginx.sh` はTLS設定済みのvhostを上書きしないので、本番は手で足す
 （先に `/home/ubuntu/backups/` へ退避し、`sudo nginx -t && sudo systemctl reload nginx`）。
 
 - `^~` が必要。無いと `.css` の正規表現 location が `/admin/static/admin.css` を取り、
   `/var/www/yscc` に探しに行って404になる。
 - `add_header` をこの location に書かない。書くと server ブロックの `add_header`
-  （X-Frame-Options 等）が継承されなくなる。管理画面のヘッダーはアプリが付ける。
+  （X-Frame-Options 等）が継承されなくなる。
+- 逆に server の `add_header` はプロキシの応答にも付くので、アプリの同名ヘッダーと二重になり値が
+  食い違う（X-Frame-Options が DENY と SAMEORIGIN の2つになった。2026-11-28 反映時）。
+  `proxy_hide_header` でアプリ側の X-Frame-Options / X-Content-Type-Options / Referrer-Policy を落とし、
+  server の値に揃えている。枠埋め込みの禁止はアプリの CSP（`frame-ancestors 'none'`）が効く。
 
 ## 公開サイトの監視
 

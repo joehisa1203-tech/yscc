@@ -50,6 +50,12 @@ server {
         proxy_read_timeout 180s;   # 公開ボタン（書き出し＋push）とAIの書き直しを待つ
         client_max_body_size 1m;
         access_log /var/log/nginx/blue-court-admin.access.log;
+        # server の add_header（X-Frame-Options 等）とアプリのヘッダーが二重になり、値が食い違う
+        # ため、アプリ側の同名ヘッダーを落として server の値に揃える。枠埋め込みの禁止は
+        # アプリの CSP（frame-ancestors 'none'）が効く。
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
     }
 
     location / {

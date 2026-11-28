@@ -96,7 +96,10 @@ def create_app(throttle: auth.Throttle | None = None) -> Flask:
 
     @app.route(PREFIX + "/login", methods=["GET", "POST"])
     def login():
-        if request.method == "GET":
+        # POST 以外（GET・HEAD）はログイン画面を返すだけ。以前は GET 以外をすべて
+        # ログイン試行として扱い、HEAD（死活監視など）が失敗回数に数えられて
+        # 正しい利用者まで15分締め出されうる状態だった（2026-11-28 本番反映時に発見）。
+        if request.method != "POST":
             if current_user():
                 return redirect(url_for("dashboard"))
             return render_template("login.html", error=None, no_users=not auth.load_users())

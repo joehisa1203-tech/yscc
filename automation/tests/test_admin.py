@@ -253,6 +253,12 @@ class LoginTest(AdminWebCase):
             self.login("wrong password!!")
         self.assertEqual(self.login().status_code, 429)
 
+    def test_head_requests_are_not_counted_as_failed_logins(self):
+        # 死活監視の HEAD で失敗回数が増えると、正しい利用者が締め出される。
+        for _ in range(6):
+            self.assertEqual(self.client.head("/admin/login").status_code, 200)
+        self.assertEqual(self.login().status_code, 302)
+
     def test_a_post_without_the_form_token_is_refused(self):
         self.login()
         self.assertEqual(self.client.post("/admin/drafts/new").status_code, 400)

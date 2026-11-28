@@ -1,6 +1,6 @@
 # 現在地（2026-11-28 更新）
 
-## 半自動化と管理画面（2026-11-28・**実装済み、本番には未反映**）
+## 半自動化と管理画面（2026-11-28 本番反映）
 
 利用者の依頼で、毎日の記事を「自動で公開」から「**自動で下書き → 管理画面で公開ボタン**」に変えた。
 設計・理由・運用は `docs/admin.md`。決めたこと（利用者が選択）:
@@ -10,13 +10,25 @@
 - 管理画面は `https://yscc.joeai.co.jp/admin/`（ログイン必須）
 - 公開前の編集、公開済み記事の非公開化、Drive写真の選択・差し替え・外す、AIでの書き直し
 
-**現状:** コードはブランチ `feature/admin` にある。テスト54件が通り、わざと壊して落ちることを
-4通り（下書きで公開してしまう／禁止表現チェックを外す／ログイン回数制限を外す／CSRF検査を外す）で
-確認済み。サンドボックス（nginx＋admin、データの複製、`GIT_PUSH=0`）でログイン→下書き→写真→
-公開→非公開をHTTPで通し、PC幅とスマホ幅の画面を確認した。
-**本番の scheduler は旧コードのまま毎日自動公開を続けている**（反映には利用者の承認が要る）。
-反映手順は下の「残課題」。
+**現状（2026-11-28 16:45 JST 反映）:** 本番で稼働中。`ycss-admin-1`（127.0.0.1:8102）と、
+下書きだけを作る `ycss-scheduler-1`。nginx の vhost に `location ^~ /admin/` を追加した。
+**最初の下書きは 2026-11-29 10:10 にできる。** それ以降、公開ボタンを押さない限りサイトは更新されない。
 
+- 確認済み: `https://yscc.joeai.co.jp/admin/login` が200、未ログインの `/admin/` はログインへ転送、
+  Cookie は `Secure; HttpOnly; Path=/admin; SameSite=Strict`、http は https へ301、
+  他のvhost（joeai.co.jp・geo・hostoneai・reply・sns）の応答は反映前と同じ、
+  `check_live_site.py` が通る（`admin-data/` は404）。テスト55件が本番イメージで通る。
+- 反映の前に、HTTP の通し試験（サンドボックスで、ログイン→下書き→写真→公開→非公開）をし、
+  テストをわざと壊して落ちることを4通りで確かめた。
+- **反映時に見つけて直した不具合:** ログイン画面への `HEAD` リクエストがログイン失敗として数えられ、
+  監視などで正しい利用者まで15分締め出されうる状態だった。POST 以外はログイン試行にしないよう直し、
+  テスト（`test_head_requests_are_not_counted_as_failed_logins`）を足した。修正前のコードで落ちることも確認済み。
+- 退避: `/home/ubuntu/backups/yscc.joeai.co.jp.bak-20261128-164334-before-admin`（vhost）、
+  `/home/ubuntu/backups/var-www-yscc-20261128-164334-before-admin.tar.gz`（公開物。展開して原本と一致を確認）、
+  ブランチ `backup/pre-admin-20261128`（反映前の main）。
+  - **戻し方:** vhost を退避ファイルで上書きして `sudo nginx -t && sudo systemctl reload nginx`、
+    `git reset --hard backup/pre-admin-20261128` → `docker compose build` →
+    `docker compose up -d --force-recreate scheduler` → `docker compose rm -sf admin`。
 
 ## リポジトリとpush先（2026-11-23 決定）
 
@@ -101,10 +113,8 @@ docker compose logs --tail=20 scheduler
 
 - 公開サイト: https://yscc.joeai.co.jp/ （このVPSのnginxが `/var/www/yscc` を配信）
 - 毎日ブログ: JST の日付ごとに記事を1本。同じ日の二重投稿はしない。
-- **（本番は 2026-11-28 時点でまだ旧方式）** 記事を作って公開するのはVPSのコンテナ1本だけ
-  （`automation/`、毎日 `PUBLISH_AT`）。LLMが本文を書き、Driveの写真を付け、`/var/www/yscc` へ
-  複製し、`origin` へpushする。`feature/admin` を反映すると、ここが「下書きを作るだけ」に変わり、
-  公開は管理画面の公開ボタンだけになる。
+- **記事を公開するのは管理画面の公開ボタンだけ**（2026-11-28〜）。scheduler（毎日 `PUBLISH_AT`）は
+  LLMの本文とDriveの写真で下書きを作るだけ。公開ボタンで `/var/www/yscc` へ複製し、`origin` へpushする。
   GitHub Actions は検証専用で、記事を作らずpushもしない。
 - **全経路の通し試験を実施（2026-11-23 17:00 JST）。** schedulerが時刻どおりに起動し、
   LLMが本文を書き、Driveから写真を取り、ページ生成→push→公開サイト反映まで1回で通った。
@@ -160,24 +170,10 @@ docker compose logs --tail=20 scheduler
 
 ## 残課題
 
-### 管理画面を本番に反映する（承認待ち）
-
-こちらで行う作業（**本番の変更なので、着手前に利用者の承認を取る**）:
-
-1. 退避: 本番vhost（`/etc/nginx/sites-available/yscc.joeai.co.jp`）と `/var/www/yscc` を
-   `/home/ubuntu/backups/` へ。リポジトリは `backup/pre-admin-20261128` ブランチを作成済み。
-2. `/home/ubuntu/BLOG/ycss` の `main` に `feature/admin` を取り込む。
-   **取り込んだら直ちに次の3をやる**（scheduler は旧コードのまま動き続けるため）。
-3. `docker compose build` → `docker compose up -d --force-recreate scheduler admin`。
-4. vhost に `location ^~ /admin/`（`deploy/nginx/blue-court.conf.template` と同じ）を足し、
-   `sudo nginx -t && sudo systemctl reload nginx`。他のvhost（WordPress・geo・sns・reply）の応答を確認。
-5. `https://yscc.joeai.co.jp/admin/login` が開くこと、`scripts/check_live_site.py` が通ることを確認し、
-   `origin` へ push。
-
-利用者の作業: 3 の後に**管理者アカウントを作る**（パスワードは本人が入力。`docs/admin.md`）。
-
 ### 利用者（本人）にしかできないこと
 
+0. **管理者アカウントを作る**（パスワードは本人が入力。手順は `docs/admin.md` の「管理者アカウント」）。
+   作るまで誰もログインできず、**下書きが溜まるだけでサイトは更新されない。**
 1. **公開する写真の権利確認。** 共有ドライブに入れた画像は下書きに自動で付く（半自動の反映後は、公開前に管理画面で確認・差し替えできる）。
    増やす場合は `yscc-blog-reader@yscc-blog.iam.gserviceaccount.com` がメンバーになっている
    共有ドライブ「Y.S.C.C._BLOG」に置く。こちらの設定変更は不要（翌日の記事から自動で付く）。
