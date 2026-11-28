@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}ログイン{% endblock %}
+{% block content %}
+<section class="admin-panel admin-login">
+<p class="eyebrow"><span></span> ADMIN LOGIN</p>
+<h1>管理画面にログイン</h1>
+{% if error %}<p class="admin-flash error" role="alert">{{ error }}</p>{% endif %}
+{% if no_users %}<p class="admin-note">管理者アカウントがまだありません。VPSで <code>python -m automation.admin.users add &lt;名前&gt;</code> を実行して作成してください（docs/admin.md）。</p>{% endif %}
+<form method="post" action="{{ url_for('login') }}" class="admin-form">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<label for="username">名前</label>
+<input id="username" name="username" autocomplete="username" required maxlength="40" autofocus>
+<label for="password">パスワード</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="200">
+<button class="btn btn-orange" type="submit">ログイン <span>→</span></button>
+</form>
+</section>
+{% endblock %}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that the live site serves today's article and no private file.
+"""Check that the live site serves a recent article and no private file.
 
 Why content and not HTTP 200: the old smoke test only looked for 'JFL 2026' on
 the top page, so it stayed green while the site served a stale copy from another
@@ -16,12 +16,16 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else
         os.environ.get("SITE_BASE_URL", "https://yscc.joeai.co.jp/")).rstrip("/") + "/"
-PRIVATE = (".env", "secrets/google-service-account.json", "automation/app/config.py")
+PRIVATE = (".env", "secrets/google-service-account.json", "automation/app/config.py",
+           "admin-data/drafts.json", "admin-data/users.json")
+# 半自動（管理画面の公開ボタン）になったので、当日の記事が無い日は普通にある。
+# 最新の記事がこの日数より古ければ「更新が止まっている」とみなして落とす。
+FRESH_DAYS = int(os.environ.get("CHECK_FRESH_DAYS", "3"))
 ATTEMPTS = int(os.environ.get("CHECK_ATTEMPTS", "10"))
 
 
@@ -36,19 +40,20 @@ def today_jst() -> str:
 
 def check_fresh() -> bool:
     today = today_jst()
+    oldest_ok = (datetime.fromisoformat(today) - timedelta(days=FRESH_DAYS)).date().isoformat()
     for attempt in range(1, ATTEMPTS + 1):
         try:
             posts = json.loads(fetch(BASE + "data/posts.json").read())["posts"]
             latest = max(p["date"] for p in posts)
             print(f"live site: latest {latest}, {len(posts)} articles (today {today})")
-            if latest >= today:
+            if latest >= oldest_ok:
                 return True
         except (urllib.error.URLError, ValueError, KeyError) as error:
             print(f"attempt {attempt}/{ATTEMPTS}: {error}")
         if attempt < ATTEMPTS:
             time.sleep(30)
-    print("FAIL: the live site is not serving an article for today.")
-    print("Check on the VPS: docker compose logs scheduler")
+    print(f"FAIL: no article published since {oldest_ok}.")
+    print("Check the drafts waiting in https://yscc.joeai.co.jp/admin/ (and: docker compose logs scheduler)")
     return False
 
 

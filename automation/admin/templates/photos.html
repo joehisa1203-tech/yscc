@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}写真を選ぶ{% endblock %}
+{% block content %}
+<p><a class="admin-link" href="{{ url_for('draft', draft_id=d.id) }}">← 下書きへ戻る</a></p>
+<section class="admin-panel">
+<p class="eyebrow"><span></span> GOOGLE DRIVE</p><h1>{{ d.date }} の記事の写真を選ぶ</h1>
+<p class="admin-note">権利を確認した写真だけを選んでください。1600×900（16:9）の中央で切り出されます。HEICは読めないことがあります。</p>
+{% if images %}<ul class="admin-photos">
+{% for img in images %}<li>
+<img src="{{ url_for('thumb', file_id=img.id) }}" alt="{{ img.name }}" loading="lazy" width="480" height="270">
+<strong>{{ img.name }}</strong>
+<small>{% if img.id in used %}公開済み（{{ used[img.id].date }}）{% elif img.id in others %}別の下書きで使用中{% else %}未使用{% endif %}{% if d.photo and d.photo.fileId == img.id %} ／ この下書きの写真{% endif %}</small>
+<form method="post" action="{{ url_for('set_photo', draft_id=d.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<input type="hidden" name="file_id" value="{{ img.id }}"><input type="hidden" name="name" value="{{ img.name }}">
+<button class="btn btn-navy" type="submit">この写真にする</button></form>
+</li>{% endfor %}</ul>
+{% else %}<p class="admin-empty">フォルダに画像がありません。</p>{% endif %}
+</section>
+{% endblock %}

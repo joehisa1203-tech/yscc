@@ -1,4 +1,4 @@
-"""Publish once a day at PUBLISH_AT, Japan time.
+"""Draft once a day at PUBLISH_AT, Japan time (publishing is the admin's button).
 
 wp-ai-bot's scheduler sleeps a fixed number of hours, which drifts away from
 the intended posting time after a restart. This one aims at a JST wall clock
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import config
-from .publisher import publish_once
+from .drafts import create_today
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -26,10 +26,10 @@ def next_run(now: datetime) -> datetime:
 
 
 def main() -> None:
-    print(f"[SCHEDULER] daily publish at {config.PUBLISH_AT} JST")
+    print(f"[SCHEDULER] daily draft at {config.PUBLISH_AT} JST (published only from the admin screen)")
     if config.RUN_AT_START:
         try:
-            publish_once()
+            create_today()
         except Exception as error:
             print("[SCHEDULER] first run failed:", error)
             traceback.print_exc()
@@ -39,7 +39,7 @@ def main() -> None:
         print(f"[SCHEDULER] next run {target.isoformat()}")
         time.sleep(max(1, int((target - now).total_seconds())))
         try:
-            publish_once()
+            create_today()
         except Exception as error:
             print("[SCHEDULER] run failed:", error)
             traceback.print_exc()

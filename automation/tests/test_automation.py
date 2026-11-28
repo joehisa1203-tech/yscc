@@ -116,29 +116,24 @@ class HeroImageTest(unittest.TestCase):
         self.assertEqual(dict(out.getexif()), {})
 
 
-class FetchPhotoTest(unittest.TestCase):
-    def test_saves_the_file_and_records_it_in_the_ledger(self):
+class StageTest(unittest.TestCase):
+    def test_writes_the_hero_jpeg_without_touching_the_ledger(self):
+        # 台帳は「公開した写真」の記録。下書きに付けただけで使用済みにすると、
+        # 公開しなかった写真が二度と選ばれなくなる。
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             raw = Image.new("RGB", (1200, 800))
             buffer = io.BytesIO()
             raw.save(buffer, format="JPEG")
-            service = FakeService({"root": [[photo("a", "yokohama.jpg", "1")]]})
-            service.files().get = lambda **kwargs: mock.Mock(execute=lambda: {"id": "root", "name": "写真"})
-            with mock.patch.object(config, "PHOTO_DIR", root / "assets" / "photos"), \
-                 mock.patch.object(config, "PHOTO_LEDGER", root / "data" / "photos.json"), \
-                 mock.patch.object(config, "GDRIVE_FOLDER_ID", "rootfolderid"), \
-                 mock.patch.object(config, "PHOTO_CREDIT", "撮影: 編集部"), \
-                 mock.patch.object(drive_photos, "extract_folder_id", lambda _v: "root"), \
-                 mock.patch.object(drive_photos, "build_service", lambda: service), \
+            with mock.patch.object(config, "PHOTO_LEDGER", root / "data" / "photos.json"), \
+                 mock.patch.object(drive_photos, "build_service", lambda: None), \
                  mock.patch.object(drive_photos, "download", lambda _s, _i: buffer.getvalue()):
-                hero = drive_photos.fetch_photo_for("2026-11-23")
-            self.assertEqual(hero["src"], "assets/photos/2026-11-23-hero.jpg")
-            self.assertEqual(hero["credit"], "撮影: 編集部")
-            self.assertTrue((root / "assets" / "photos" / "2026-11-23-hero.jpg").exists())
-            ledger = json.loads((root / "data" / "photos.json").read_text(encoding="utf-8"))
-            self.assertEqual(ledger["photos"][0]["fileId"], "a")
+                size = drive_photos.stage("a", root / "staged" / "x.jpg")
+            self.assertGreater(size, 0)
+            self.assertEqual(Image.open(root / "staged" / "x.jpg").size,
+                             (config.PHOTO_WIDTH, config.PHOTO_HEIGHT))
+            self.assertFalse((root / "data" / "photos.json").exists())
 
 
 class FolderAccessTest(unittest.TestCase):
@@ -153,38 +148,16 @@ class FolderAccessTest(unittest.TestCase):
         with mock.patch.object(config, "GDRIVE_FOLDER_ID", "x" * 20), \
              mock.patch.object(drive_photos, "build_service", lambda: service), \
              mock.patch.object(drive_photos, "extract_folder_id", lambda _v: "nope"):
-            self.assertIsNone(drive_photos.fetch_photo_for("2026-11-24"))
+            self.assertIsNone(drive_photos.folder_images())
+            self.assertIsNone(drive_photos.pick_for_draft(set()))
 
 
-class AttachPhotoTest(unittest.TestCase):
-    def test_skips_quietly_when_drive_is_not_configured(self):
-        with mock.patch.object(config, "GDRIVE_FOLDER_ID", ""):
-            self.assertFalse(publisher.attach_photo("2026-11-23"))
-
-    def test_a_drive_failure_does_not_stop_the_article(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            posts = Path(tmp) / "posts.json"
-            posts.write_text(json.dumps({"posts": [{"id": "x", "date": "2026-11-23"}]}), encoding="utf-8")
-            def boom(_date):
-                raise RuntimeError("drive down")
-            with mock.patch.object(config, "POSTS_FILE", posts), \
-                 mock.patch.object(config, "drive_configured", lambda: True), \
-                 mock.patch.object(drive_photos, "fetch_photo_for", boom):
-                self.assertFalse(publisher.attach_photo("2026-11-23"))
-
-    def test_writes_the_hero_into_posts_json(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            posts = Path(tmp) / "posts.json"
-            posts.write_text(json.dumps({"posts": [{"id": "x", "date": "2026-11-23"}]}), encoding="utf-8")
-            hero = {"src": "assets/photos/2026-11-23-hero.jpg", "alt": "写真"}
-            with mock.patch.object(config, "POSTS_FILE", posts), \
-                 mock.patch.object(config, "drive_configured", lambda: True), \
-                 mock.patch.object(drive_photos, "fetch_photo_for", lambda _d: hero):
-                self.assertTrue(publisher.attach_photo("2026-11-23"))
-            saved = json.loads(posts.read_text(encoding="utf-8"))
-            self.assertEqual(saved["posts"][0]["hero"], hero)
+class PickForDraftTest(unittest.TestCase):
+    def test_skips_a_photo_that_another_draft_already_has(self):
+        images = [photo("a", "a.jpg", "1"), photo("b", "b.jpg", "2")]
+        with mock.patch.object(drive_photos, "folder_images", lambda: images), \
+             mock.patch.object(drive_photos, "load_ledger", lambda: {"photos": []}):
+            self.assertEqual(drive_photos.pick_for_draft({"a"})["fileId"], "b")
 
 
 class ArticlePageTest(unittest.TestCase):

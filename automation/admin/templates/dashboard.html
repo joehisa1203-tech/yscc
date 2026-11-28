@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% block title %}下書きと公開{% endblock %}
+{% block content %}
+<section class="admin-panel">
+<div class="admin-heading"><div><p class="eyebrow"><span></span> DRAFTS</p><h1>確認待ちの下書き</h1>
+<p class="admin-note">毎日の記事はここに下書きとして届きます。<strong>「公開する」を押すまでサイトには出ません。</strong>押さずに日が過ぎても、下書きのまま残ります。</p></div>
+{% if not has_today %}<form method="post" action="{{ url_for('new_draft') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn btn-outline-dark" type="submit">今日（{{ today }}）の下書きを作る</button></form>{% endif %}
+</div>
+{% if drafts %}<ul class="admin-list">
+{% for d in drafts %}<li>
+<div class="admin-item-main"><span class="admin-date">{{ d.date }}</span>
+<span class="admin-badge {{ d.status }}">{{ '非公開に戻した記事' if d.status == 'unpublished' else '下書き' }}</span>
+{% if d.photo %}<span class="admin-badge">写真あり</span>{% endif %}
+{% if d.problems %}<span class="admin-badge warn">要修正 {{ d.problems|length }}件</span>{% endif %}
+<strong>{{ d.headline }}</strong><small>{{ d.note }}</small></div>
+<a class="btn btn-navy" href="{{ url_for('draft', draft_id=d.id) }}">確認・公開 <span>→</span></a>
+</li>{% endfor %}</ul>
+{% else %}<p class="admin-empty">確認待ちの下書きはありません。</p>{% endif %}
+</section>
+<section class="admin-panel">
+<div class="admin-heading"><div><p class="eyebrow"><span></span> PUBLISHED</p><h2>公開中の記事</h2></div>
+<form method="post" action="{{ url_for('rebuild') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="admin-link" type="submit">公開サイトを書き出し直す</button></form></div>
+<ul class="admin-list">
+{% for p in posts %}<li>
+<div class="admin-item-main"><span class="admin-date">{{ p.date }}</span>{% if p.hero %}<span class="admin-badge">写真あり</span>{% endif %}
+<strong><a href="{{ base }}blog/{{ p.id }}.html" target="_blank" rel="noopener">{{ p.title }} ↗</a></strong></div>
+<a class="admin-link" href="{{ url_for('confirm_unpublish', post_id=p.id) }}">非公開にする</a>
+</li>{% endfor %}</ul>
+</section>
+{% endblock %}

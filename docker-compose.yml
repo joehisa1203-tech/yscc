@@ -1,69 +1,63 @@
-# BLUE COURT blog automation.
-#   docker compose run --rm publish     … generate today's article once
-#   docker compose up -d scheduler      … keep publishing every day at PUBLISH_AT
+# BLUE COURT blog automation（2026-11-28 から半自動。設計は docs/admin.md）
+#   docker compose up -d scheduler      … 毎日 PUBLISH_AT に「下書き」を1本作る（公開はしない）
+#   docker compose up -d admin          … 管理画面。https://yscc.joeai.co.jp/admin/ で公開ボタンを押す
+#   docker compose run --rm publish     … 今日の下書きを今すぐ作る（公開はしない）
 #   docker compose up -d preview        … read the site at http://localhost:8099/
-# PREVIEW_PORT in .env moves the preview if 8099 is taken on the host.
+# PREVIEW_PORT / ADMIN_PORT in .env move the ports if they are taken on the host.
+
+# scheduler・publish・admin は同じイメージ・同じマウントで動く。3つに同じ設定を
+# 書き写すと、片方だけ直して食い違うので、ここに1回だけ書く。
+x-app: &app
+  build:
+    context: .
+    dockerfile: automation/Dockerfile
+    args:
+      APP_UID: "${HOST_UID:-1000}"
+      APP_GID: "${HOST_GID:-1000}"
+  image: blue-court-automation
+  # Write generated files as the host user, not root: root-owned articles in
+  # the working tree block the next local edit and the next git operation.
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    SITE_ROOT: /app
+    HOME: /home/app
+    GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
+    SITE_EXPORT_DIR: /public
+    # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
+    GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
+  volumes:
+    - ./:/app
+    - ./secrets:/secrets:ro
+    # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
+    - ${SSH_DIR:-~/.ssh}:/ssh:ro
+    # 公開ディレクトリ。nginxで配るときは .env の SITE_PUBLIC_DIR を
+    # /var/www/yscc にする（/home/ubuntu は www-data が辿れない）。
+    - ${SITE_PUBLIC_DIR:-./site}:/public
+
 services:
   publish:
-    build:
-      context: .
-      dockerfile: automation/Dockerfile
-      args:
-        APP_UID: "${HOST_UID:-1000}"
-        APP_GID: "${HOST_GID:-1000}"
-    image: blue-court-automation
-    # Write generated files as the host user, not root: root-owned articles in
-    # the working tree block the next local edit and the next git operation.
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      SITE_ROOT: /app
-      HOME: /home/app
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
-      # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
-      SITE_EXPORT_DIR: /public
-      GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
-    volumes:
-      - ./:/app
-      - ./secrets:/secrets:ro
-      # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
-      - ${SSH_DIR:-~/.ssh}:/ssh:ro
-      # 公開ディレクトリ。nginxで配るときは .env の SITE_PUBLIC_DIR を
-      # /var/www/blue-court にする（/home/ubuntu は www-data が辿れない）。
-      - ${SITE_PUBLIC_DIR:-./site}:/public
+    <<: *app
     command: ["python", "-m", "automation.app.run_once"]
 
   scheduler:
-    build:
-      context: .
-      dockerfile: automation/Dockerfile
-      args:
-        APP_UID: "${HOST_UID:-1000}"
-        APP_GID: "${HOST_GID:-1000}"
-    image: blue-court-automation
+    <<: *app
     restart: unless-stopped
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      SITE_ROOT: /app
-      HOME: /home/app
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/google-service-account.json
-      # 鍵はこの1本だけを使う（IdentitiesOnly）。ホスト鍵は既知のものだけ許可する。
-      SITE_EXPORT_DIR: /public
-      GIT_SSH_COMMAND: ssh -i /ssh/${SSH_KEY_FILE:-id_ed25519_github} -o IdentitiesOnly=yes -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes
-    volumes:
-      - ./:/app
-      - ./secrets:/secrets:ro
-      # push用のSSH鍵。読み取り専用で、コンテナ内からは /ssh としてのみ見える。
-      - ${SSH_DIR:-~/.ssh}:/ssh:ro
-      # 公開ディレクトリ。nginxで配るときは .env の SITE_PUBLIC_DIR を
-      # /var/www/blue-court にする（/home/ubuntu は www-data が辿れない）。
-      - ${SITE_PUBLIC_DIR:-./site}:/public
     command: ["python", "-m", "automation.app.scheduler"]
+
+  # 管理画面。127.0.0.1 だけで待ち受け、外からは nginx の /admin/ 経由でしか届かない。
+  # gunicorn は1プロセス（-w 1）。ログイン失敗の回数をメモリで数えているため、
+  # プロセスを増やすと回数制限が効かなくなる。
+  admin:
+    <<: *app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-8102}:8000"
+    command: ["gunicorn", "-w", "1", "--threads", "4", "--timeout", "180",
+              "-b", "0.0.0.0:8000", "--access-logfile", "-",
+              "automation.admin.app:create_app()"]
 
   # 公開用。site/ だけを配る（リポジトリ全体を配ると .env が読める）。
   # PREVIEW_BIND=127.0.0.1 にすると外部からは見えなくなる。

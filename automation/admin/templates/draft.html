@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}{{ d.date }} の下書き{% endblock %}
+{% block content %}
+<p><a class="admin-link" href="{{ url_for('dashboard') }}">← 一覧へ戻る</a></p>
+<section class="admin-panel">
+<p class="eyebrow"><span></span> {{ d.date }} ／ {{ '非公開に戻した記事' if d.status == 'unpublished' else '下書き（未公開）' }}</p>
+<h1>{{ d.titlePrefix }}{{ d.headline }}</h1>
+<p class="admin-note">{{ d.note }}</p>
+{% if problems %}<div class="admin-flash error" role="alert"><strong>このままでは公開できません。</strong>
+<ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+<small>架空の試合結果・観客数・料金・関係者コメントなどは、人が書いても公開しない方針です。</small></div>{% endif %}
+<p><a class="admin-link" href="{{ url_for('preview', draft_id=d.id) }}" target="_blank" rel="noopener">公開したときの見た目をプレビュー ↗</a></p>
+</section>
+
+<section class="admin-panel">
+<h2>写真</h2>
+{% if has_photo %}<img class="admin-hero" src="{{ url_for('draft_photo', draft_id=d.id) }}" alt="{{ d.photo.alt }}" width="1600" height="900">
+<p class="admin-note">Drive: {{ d.photo.driveName or '（記録なし）' }}</p>{% else %}<p class="admin-empty">写真なしで公開されます。</p>{% endif %}
+<div class="admin-actions">
+<a class="btn btn-outline-dark" href="{{ url_for('choose_photo', draft_id=d.id) }}">Driveから選ぶ</a>
+{% if d.photo %}<form method="post" action="{{ url_for('remove_photo', draft_id=d.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="admin-link" type="submit">写真を外す</button></form>{% endif %}
+</div>
+</section>
+
+<form method="post" action="{{ url_for('save_draft', draft_id=d.id) }}" class="admin-panel admin-form">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<h2>本文の編集</h2>
+<label for="category">カテゴリー</label>
+<select id="category" name="category">{% for c in categories %}<option value="{{ c }}" {% if c == d.category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+<label for="headline">タイトル{% if d.titlePrefix %}（前に「{{ d.titlePrefix }}」が付きます）{% endif %}</label>
+<input id="headline" name="headline" value="{{ d.headline }}" maxlength="120" required>
+<label for="summary">要約（一覧とSNS共有に出ます）</label>
+<textarea id="summary" name="summary" rows="2" maxlength="300" required>{{ d.summary }}</textarea>
+<label for="body">本文（段落の間は空行で区切る）</label>
+<textarea id="body" name="body" rows="16" required>{{ body_text }}</textarea>
+{% if d.photo %}
+<label for="alt">写真の代替テキスト（写真の内容を一文で。読み上げと検索に使われます）</label>
+<input id="alt" name="alt" value="{{ d.photo.alt }}" maxlength="200">
+<label for="credit">写真のクレジット（空なら出しません）</label>
+<input id="credit" name="credit" value="{{ d.photo.credit or '' }}" maxlength="100">
+{% endif %}
+<div class="admin-actions admin-actions-end">
+<button class="btn btn-outline-dark" type="submit" name="action" value="save">保存だけする</button>
+<button class="btn btn-orange" type="submit" name="action" value="publish">保存して公開する <span>→</span></button>
+</div>
+<p class="admin-note">「公開する」を押すと、すぐに https://yscc.joeai.co.jp/ に掲載され、GitHubにも送られます。</p>
+</form>
+
+<form method="post" action="{{ url_for('regenerate', draft_id=d.id) }}" class="admin-panel">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<h2>AIに書き直させる</h2>
+<p class="admin-note">タイトル・要約・本文をAIが書き直します。<strong>手で直した内容は消えます。</strong>写真はそのままです。</p>
+<button class="btn btn-outline-dark" type="submit">AIで書き直す</button>
+</form>
+{% endblock %}

@@ -1,4 +1,22 @@
-# 現在地（2026-11-23 更新）
+# 現在地（2026-11-28 更新）
+
+## 半自動化と管理画面（2026-11-28・**実装済み、本番には未反映**）
+
+利用者の依頼で、毎日の記事を「自動で公開」から「**自動で下書き → 管理画面で公開ボタン**」に変えた。
+設計・理由・運用は `docs/admin.md`。決めたこと（利用者が選択）:
+
+- 下書きは毎日自動で作る（PUBLISH_AT）。公開は管理画面の「保存して公開する」だけ
+- 押されないまま日が過ぎた下書きは**下書きのまま残す**（自動では公開しない）
+- 管理画面は `https://yscc.joeai.co.jp/admin/`（ログイン必須）
+- 公開前の編集、公開済み記事の非公開化、Drive写真の選択・差し替え・外す、AIでの書き直し
+
+**現状:** コードはブランチ `feature/admin` にある。テスト54件が通り、わざと壊して落ちることを
+4通り（下書きで公開してしまう／禁止表現チェックを外す／ログイン回数制限を外す／CSRF検査を外す）で
+確認済み。サンドボックス（nginx＋admin、データの複製、`GIT_PUSH=0`）でログイン→下書き→写真→
+公開→非公開をHTTPで通し、PC幅とスマホ幅の画面を確認した。
+**本番の scheduler は旧コードのまま毎日自動公開を続けている**（反映には利用者の承認が要る）。
+反映手順は下の「残課題」。
+
 
 ## リポジトリとpush先（2026-11-23 決定）
 
@@ -82,9 +100,11 @@ docker compose logs --tail=20 scheduler
 ## 動いているもの
 
 - 公開サイト: https://yscc.joeai.co.jp/ （このVPSのnginxが `/var/www/yscc` を配信）
-- 毎日ブログ: `scripts/daily_blog.py` が JST の日付ごとに記事を1本生成。同じ日の二重投稿はしない。
-- **記事を作って公開するのはVPSのコンテナ1本だけ**（`automation/`、毎日 `PUBLISH_AT`）。
-  LLMが本文を書き、Driveの写真を付け、`/var/www/yscc` へ複製し、`origin` へpushする。
+- 毎日ブログ: JST の日付ごとに記事を1本。同じ日の二重投稿はしない。
+- **（本番は 2026-11-28 時点でまだ旧方式）** 記事を作って公開するのはVPSのコンテナ1本だけ
+  （`automation/`、毎日 `PUBLISH_AT`）。LLMが本文を書き、Driveの写真を付け、`/var/www/yscc` へ
+  複製し、`origin` へpushする。`feature/admin` を反映すると、ここが「下書きを作るだけ」に変わり、
+  公開は管理画面の公開ボタンだけになる。
   GitHub Actions は検証専用で、記事を作らずpushもしない。
 - **全経路の通し試験を実施（2026-11-23 17:00 JST）。** schedulerが時刻どおりに起動し、
   LLMが本文を書き、Driveから写真を取り、ページ生成→push→公開サイト反映まで1回で通った。
@@ -134,13 +154,31 @@ docker compose logs --tail=20 scheduler
 - **写真はDriveに入っているものだけを使い、未使用の古い順に1枚ずつ消費する。** ランダム選択にしない理由と
   EXIFを落とす理由は `docs/automation.md`。
 - **認証情報が無くてもブログは止めない。** Drive未設定なら写真なしで記事を出す。
+- **記事の公開は人が確認してから**（2026-11-28 利用者が決定）。公開経路は管理画面の公開ボタンだけ。
+  自動公開には戻さない。禁止表現（`writer.BANNED`）は人が書いた本文にも適用する。根拠は `docs/admin.md`。
 - **秘密情報はこちらで生成・記入しない。** `.env` と `secrets/` への記入は利用者本人。
 
 ## 残課題
 
+### 管理画面を本番に反映する（承認待ち）
+
+こちらで行う作業（**本番の変更なので、着手前に利用者の承認を取る**）:
+
+1. 退避: 本番vhost（`/etc/nginx/sites-available/yscc.joeai.co.jp`）と `/var/www/yscc` を
+   `/home/ubuntu/backups/` へ。リポジトリは `backup/pre-admin-20261128` ブランチを作成済み。
+2. `/home/ubuntu/BLOG/ycss` の `main` に `feature/admin` を取り込む。
+   **取り込んだら直ちに次の3をやる**（scheduler は旧コードのまま動き続けるため）。
+3. `docker compose build` → `docker compose up -d --force-recreate scheduler admin`。
+4. vhost に `location ^~ /admin/`（`deploy/nginx/blue-court.conf.template` と同じ）を足し、
+   `sudo nginx -t && sudo systemctl reload nginx`。他のvhost（WordPress・geo・sns・reply）の応答を確認。
+5. `https://yscc.joeai.co.jp/admin/login` が開くこと、`scripts/check_live_site.py` が通ることを確認し、
+   `origin` へ push。
+
+利用者の作業: 3 の後に**管理者アカウントを作る**（パスワードは本人が入力。`docs/admin.md`）。
+
 ### 利用者（本人）にしかできないこと
 
-1. **公開する写真の権利確認。** 共有ドライブに入れた画像はそのまま記事に載る。
+1. **公開する写真の権利確認。** 共有ドライブに入れた画像は下書きに自動で付く（半自動の反映後は、公開前に管理画面で確認・差し替えできる）。
    増やす場合は `yscc-blog-reader@yscc-blog.iam.gserviceaccount.com` がメンバーになっている
    共有ドライブ「Y.S.C.C._BLOG」に置く。こちらの設定変更は不要（翌日の記事から自動で付く）。
    ただし**複数入れたら `PHOTO_REUSE` を `1` に戻し、`PHOTO_ALT` を写真向けの文言に直す**こと
@@ -171,6 +209,18 @@ docker compose logs --tail=20 scheduler
 
 ### 未着手
 
+- **写真の不具合2件（2026-11-28 の調査で発見・未修正。利用者の判断で「今は調査のみ」）。**
+  - HEIC（iPhoneの標準形式）を読めない。自動選択で古い順の先頭にHEICがあると、毎日同じ
+    ファイルで失敗して写真が付かない（管理画面で別の写真を選べば回避できる）。
+  - スマホ写真の回転情報（EXIF Orientation）を反映せずに EXIF を消すため、縦写真が横倒しになる。
+  - どちらも `automation/app/drive_photos.py` の `to_hero_jpeg` 周り。
+- **「AIが写真の内容を理解して書く」機能は無い。** 写真と本文は別々に選ばれる。代替テキストは
+  管理画面で写真ごとに直せるようになった（以前は `.env` の全写真共通の1文だけ）。
+- **バックアップが無い:** `.env`、`secrets/`、`admin-data/`（下書き・管理者アカウント）はgitに
+  入らず、日次バックアップも無い。失うとサーバーを直しても動かない。
+- **古い表示:** `data/matches.json` は 2026-11-13 確認のまま（チケットは全試合「準備中」）。
+  `index.html` の FAQ（11月15日の料金・会場）と JSON-LD の `url`（onrender のURL）が古い。
+
 - アクセス解析（GA4）、観客数実績の測定は未設定。
 - `data/matches.json` の日程は手動更新のまま（自動取得はしない方針）。
 
@@ -178,4 +228,5 @@ docker compose logs --tail=20 scheduler
 
 - `README.md` … サイトの目的・構成・公式情報
 - `CLAUDE.md` … 目次とこのリポジトリ固有の地雷
-- `docs/automation.md` … Docker自動化アプリの設計・環境変数・Drive設定・運用
+- `docs/automation.md` … 下書きを作る側（AI執筆・Drive写真・環境変数・nginx構成）
+- `docs/admin.md` … 管理画面と公開ボタン（流れ・ログインの守り・管理者アカウント・本番nginx）

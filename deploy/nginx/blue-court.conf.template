@@ -35,6 +35,23 @@ server {
         add_header Cache-Control "public, max-age=604800";
     }
 
+    # 管理画面（docker compose の admin サービス、127.0.0.1:8102）。
+    # ^~ にするのは、上の正規表現 location（.css/.js の長期キャッシュ・隠しファイル遮断）に
+    # 管理画面のURLを取られないため。取られると admin.css が404になり、画面が崩れる。
+    # X-Forwarded-For は追記せず $remote_addr で上書きする（アプリは1段だけ信用する。
+    # 追記にすると、利用者が送った偽のIPでログイン回数制限をすり抜けられる）。
+    # セキュリティ系ヘッダーはアプリが付ける（ここで add_header を書くと server の
+    # add_header が継承されなくなる）。
+    location ^~ /admin/ {
+        proxy_pass http://127.0.0.1:8102;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;   # 公開ボタン（書き出し＋push）とAIの書き直しを待つ
+        client_max_body_size 1m;
+        access_log /var/log/nginx/blue-court-admin.access.log;
+    }
+
     location / {
         try_files $uri $uri/ =404;
     }

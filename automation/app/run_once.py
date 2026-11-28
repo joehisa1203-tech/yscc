@@ -1,5 +1,5 @@
-"""Single publishing run; the container's default command."""
-from .publisher import publish_once
+"""Make today's draft once (the `publish` service). It does not publish: use the admin screen."""
+from .drafts import create_today
 
 if __name__ == "__main__":
-    publish_once()
+    create_today()

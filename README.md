@@ -13,22 +13,19 @@ GitHub: https://github.com/joehisa1203-tech/yscc （push先はここだけ。`so
 - Y.S.C.C.公式チケット: https://ticket.yscc1986.net/
 - YS-BASE: https://ys-base.yscc1986.net/
 
-## 毎日のブログ投稿
+## 毎日のブログ投稿（半自動）
 
-毎日の記事は、JSTの日付ごとに `scripts/daily_blog.py` が1本だけ生成します（同じ日の二重投稿はしません）。
-これを動かす経路が2つあります。
+**毎日の記事は自動で「下書き」になり、管理者が管理画面で「公開」を押したときだけ公開されます**（2026-11-28〜）。
 
-- **Dockerアプリ `automation/`** … `docker compose up -d scheduler` で毎日 `PUBLISH_AT`（既定 10:10 JST）に実行。
-  Google Driveのフォルダから未使用の写真を1枚取り出してヒーロー画像にし、`GIT_PUSH=1` ならcommit＆pushします。
-  設計・環境変数・Driveの準備は `docs/automation.md`。
-- **GitHub Actions `.github/workflows/publish.yml`** … 毎日 10:10 JST頃。写真なしのテキスト記事。
-  スケジュール実行は混雑時に遅延することがあります。
+1. VPSの `scheduler` コンテナが毎日 `PUBLISH_AT`（既定 10:10 JST）に、その日の下書きを1本作ります。
+   本文はOpenAIが書き、Google Driveの共有ドライブから未使用の写真を1枚付けます。
+2. 管理者が https://yscc.joeai.co.jp/admin/ にログインし、内容を確認・編集・写真を差し替えます。
+3. 「保存して公開する」で、サイト（このVPSのnginx）に掲載し、GitHubへpushします。
+   押さなければ公開されず、日が過ぎても下書きのまま残ります。公開済みの記事は非公開にも戻せます。
 
-公開できているかは、実行ログ（Actionsの履歴、または `docker compose logs scheduler`）で確認してください。
-
-**Renderの自動デプロイは現在このリポジトリにつながっていません。** Renderが見ているのは
-`softrenzu/ycss` で、そちらへは push しない方針です。公開サイトへ反映するには Render の
-接続先を `joehisa1203-tech/yscc` に切り替える必要があります（利用者の作業）。詳細は `docs/status.md`。
+管理画面の設計・ログインの守り・管理者アカウントの作り方は `docs/admin.md`、
+下書きを作る側（AI執筆・Drive写真・環境変数）は `docs/automation.md`。
+GitHub Actions は検証専用で、記事を作らず push もしません。
 
 記事内容は、サッカー観戦の魅力・チケットの買い方・スタジアムへの行き方・JFLの見どころ・クラブへの関心を高めるテーマを24本でローテーション。架空の試合結果、観客数、チケット残席、選手のコメントや募集状況は作りません。ニュース記事の自動要約や無断転載も行いません。
 
@@ -43,9 +40,11 @@ GitHub: https://github.com/joehisa1203-tech/yscc （push先はここだけ。`so
 - `data/matches.json`: 2026年11月13日に公式情報から確認したJFL日程（手動更新）。
 - `data/posts.json`: ブログの記事・出典・日付。
 - `blog/*.html`: SEOと共有に対応した独立記事ページ。
-- `scripts/daily_blog.py`: 毎日記事生成・ページ再構築・sitemap更新。
-- `automation/`: Docker版ブログ自動化アプリ（記事生成・Drive写真・commit/push・スケジューラ）とテスト。
-- `docker-compose.yml`: `publish`（1回実行） / `scheduler`（毎日） / `preview`（ローカル表示確認）。
+- `scripts/daily_blog.py`: 記事ページ・sitemap・robotsの再構築（`build`）と手書き記事のローテーション（`TIPS`）。
+- `automation/app/`: 下書き作成（AI執筆・Drive写真）・公開・書き出し・push・スケジューラ。
+- `automation/admin/`: 管理画面（ログイン・下書きの確認と公開・非公開化）。
+- `automation/tests/`: テスト。
+- `docker-compose.yml`: `scheduler`（毎日下書き） / `admin`（管理画面） / `publish`（下書きを今すぐ1本） / `preview`（ローカル表示確認）。
 - `data/photos.json`: 使用済みDrive写真の台帳。`assets/photos/`: 書き出した写真。
 - `.github/workflows/site-smoke-test.yml`: 公開先へのHTTPアクセス検証。
 
@@ -63,7 +62,7 @@ Docker（推奨）:
 
 ```bash
 cp .env.example .env
-docker compose run --rm publish
+docker compose run --rm publish   # 今日の下書きを作る（公開は管理画面から）
 docker compose up -d preview
 ```
 

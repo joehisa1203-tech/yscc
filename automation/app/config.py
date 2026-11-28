@@ -21,6 +21,13 @@ PHOTO_WEB_DIR = "assets/photos"
 # （/home/ubuntu は drwxr-x--- で www-data が辿れない）。
 SITE_EXPORT_DIR = Path(os.environ.get("SITE_EXPORT_DIR", str(SITE_ROOT / "site")))
 
+# 管理画面と下書きの置き場所。**公開ディレクトリにもgitにも入れない**
+# （下書きは未確認の記事で、リポジトリは公開されている）。.gitignore で除外し、
+# export_site() の許可リストにも入っていない。
+ADMIN_DATA_DIR = Path(os.environ.get("ADMIN_DATA_DIR", str(SITE_ROOT / "admin-data")))
+# 本番は https なので 1。テストや http の手元確認だけ 0 にする。
+ADMIN_COOKIE_SECURE = os.environ.get("ADMIN_COOKIE_SECURE", "1") not in ("0", "false", "False")
+
 # --- Google Drive -----------------------------------------------------------
 GDRIVE_FOLDER_ID = os.environ.get("GDRIVE_FOLDER_ID", "").strip()
 GOOGLE_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()

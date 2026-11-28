@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}非公開にする{% endblock %}
+{% block content %}
+<section class="admin-panel">
+<p class="eyebrow"><span></span> UNPUBLISH</p><h1>この記事を非公開にしますか？</h1>
+<p><strong>{{ post.date }}　{{ post.title }}</strong></p>
+<ul class="admin-note">
+<li>サイトの一覧・記事ページ・サイトマップから消え、<a href="{{ base }}blog/{{ post.id }}.html" target="_blank" rel="noopener">記事のURL</a>は404になります。</li>
+<li>記事は下書きに戻ります。直してからもう一度公開できます。</li>
+<li>GitHubのリポジトリは公開されているため、<strong>過去の版は履歴に残ります</strong>（完全には消えません）。</li>
+</ul>
+<form method="post" action="{{ url_for('unpublish', post_id=post.id) }}" class="admin-actions">
+<input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<button class="btn btn-orange" type="submit">非公開にする</button>
+<a class="admin-link" href="{{ url_for('dashboard') }}">やめる</a>
+</form>
+</section>
+{% endblock %}

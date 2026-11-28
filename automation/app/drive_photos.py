@@ -126,20 +126,25 @@ def save_ledger(ledger: dict) -> None:
     )
 
 
-def choose(images: list[dict], ledger: dict) -> dict | None:
-    """Oldest photo that has never been published; else the oldest used one."""
+def choose(images: list[dict], ledger: dict, exclude: set[str] | None = None) -> dict | None:
+    """Oldest photo that has never been published; else the oldest used one.
+
+    `exclude` は他の下書きに付いている写真。同じ写真が2本の下書きに付くのを防ぐ。
+    """
+    exclude = exclude or set()
     used = {entry["fileId"]: entry for entry in ledger.get("photos", [])}
-    for item in images:
+    candidates = [item for item in images if item["id"] not in exclude]
+    for item in candidates:
         if item["id"] not in used:
             return item
-    if not config.PHOTO_REUSE or not images:
+    if not config.PHOTO_REUSE or not candidates:
         return None
-    oldest = sorted(images, key=lambda f: used[f["id"]]["date"] if f["id"] in used else "")
+    oldest = sorted(candidates, key=lambda f: used[f["id"]]["date"] if f["id"] in used else "")
     return oldest[0]
 
 
-def fetch_photo_for(date: str) -> dict | None:
-    """Download and store one photo for `date`. Returns hero metadata or None."""
+def folder_images() -> list[dict] | None:
+    """Every image in the configured folder, oldest first. None = the folder is unreachable."""
     folder_id = extract_folder_id(config.GDRIVE_FOLDER_ID)
     service = build_service()
     # 共有されていないフォルダは list が空を返すだけなので、「0枚」と
@@ -154,33 +159,65 @@ def fetch_photo_for(date: str) -> dict | None:
         return None
     images = list_images(service, folder_id)
     print(f"[DRIVE] folder {folder.get('name')!r}: {len(images)} images")
+    return images
+
+
+def stage(file_id: str, destination: Path) -> int:
+    """Download one Drive image, convert it to the hero JPEG and write it. Returns bytes written."""
+    jpeg = to_hero_jpeg(download(build_service(), file_id))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(jpeg)
+    return len(jpeg)
+
+
+def thumbnail_jpeg(raw: bytes, width: int = 480) -> bytes:
+    """Small preview for the admin photo picker. Metadata is dropped here as well."""
+    image = Image.open(io.BytesIO(raw)).convert("RGB")
+    image.thumbnail((width, width))
+    out = io.BytesIO()
+    image.save(out, format="JPEG", quality=75)
+    return out.getvalue()
+
+
+def pick_for_draft(exclude: set[str]) -> dict | None:
+    """The photo a new draft gets automatically: {"fileId", "driveName"} or None."""
+    images = folder_images()
     if not images:
-        print("[DRIVE] フォルダは見えていますが画像がありません（JPEG/PNG/WebP/HEICのみ対象）")
+        if images == []:
+            print("[DRIVE] フォルダは見えていますが画像がありません（JPEG/PNG/WebP/HEICのみ対象）")
         return None
-    ledger = load_ledger()
-    picked = choose(images, ledger)
+    picked = choose(images, load_ledger(), exclude)
     if not picked:
-        print("[DRIVE] every photo has been used and PHOTO_REUSE is off")
+        print("[DRIVE] every photo has been used (or is on another draft) and PHOTO_REUSE is off")
         return None
-    raw = download(service, picked["id"])
-    jpeg = to_hero_jpeg(raw)
-    config.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{date}-hero.jpg"
-    (config.PHOTO_DIR / filename).write_bytes(jpeg)
-    src = f"{config.PHOTO_WEB_DIR}/{filename}"
-    ledger.setdefault("photos", []).insert(
-        0,
-        {
-            "fileId": picked["id"],
-            "driveName": picked.get("name", ""),
-            "date": date,
-            "src": src,
-            "fetchedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        },
-    )
+    return {"fileId": picked["id"], "driveName": picked.get("name", "")}
+
+
+def record_published(file_id: str, drive_name: str, date: str, src: str) -> None:
+    """公開した写真を台帳に記録する。台帳は「公開中の写真」の一覧で、下書きの写真は入れない。"""
+    ledger = load_ledger()
+    photos = [e for e in ledger.get("photos", []) if e.get("src") != src]
+    photos.insert(0, {
+        "fileId": file_id,
+        "driveName": drive_name,
+        "date": date,
+        "src": src,
+        "fetchedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+    })
+    ledger["photos"] = photos
     save_ledger(ledger)
-    print(f"[DRIVE] saved {src} ({len(jpeg) // 1024} KB) from {picked.get('name', '')}")
-    hero = {"src": src, "alt": config.PHOTO_ALT}
-    if config.PHOTO_CREDIT:
-        hero["credit"] = config.PHOTO_CREDIT
-    return hero
+
+
+def forget_published(src: str) -> dict | None:
+    """非公開にした記事の写真を台帳から外し、その記録を返す（再公開時に使う）。"""
+    ledger = load_ledger()
+    kept, removed = [], None
+    for entry in ledger.get("photos", []):
+        if entry.get("src") == src and removed is None:
+            removed = entry
+        else:
+            kept.append(entry)
+    if removed is not None:
+        ledger["photos"] = kept
+        save_ledger(ledger)
+    return removed

@@ -1,4 +1,4 @@
-"""Write one day's article with the Claude API, or refuse to.
+"""Write one day's article with the OpenAI API, or refuse to.
 
 Why a writer at all: scripts/daily_blog.py rotates 24 hand-written tips, so the
 same body text returns every 24 days. The LLM gives a different article daily.
@@ -24,6 +24,9 @@ import re
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 CATEGORIES = ("観戦ガイド", "クラブを知る", "横浜の街")
+# 人が選べるカテゴリー。トップページの絞り込みボタン（index.html の data-cat）と同じ並び。
+# 「試合情報」はLLMには書かせない（試合の事実を知らないため）が、人が書いた記事には使う。
+EDIT_CATEGORIES = ("観戦ガイド", "試合情報", "横浜の街", "クラブを知る")
 
 SYSTEM = """あなたはY.S.C.C.横浜（日本フットボールリーグ=JFLに所属するサッカークラブ）の
 非公式ファンメディア「BLUE COURT」の編集者です。ホームゲームの観客を増やすために、
@@ -114,11 +117,41 @@ def check(article: dict, recent_titles: list[str]) -> list[str]:
                 problems.append(f"{index}段落目の長さが範囲外")
     if title in recent_titles or any(title in t for t in recent_titles):
         problems.append("最近の記事と同じタイトル")
-    text = "\n".join([title, summary, *[p for p in body if isinstance(p, str)]])
+    problems.extend(banned_problems([title, summary, *[p for p in body if isinstance(p, str)]]))
+    return problems
+
+
+def banned_problems(parts: list[str]) -> list[str]:
+    """BANNED に当たる表現をすべて返す。LLMの出力にも管理者の編集にも同じ判定を使う。"""
+    text = "\n".join(parts)
+    problems = []
     for pattern, reason in BANNED:
         found = re.search(pattern, text)
         if found:
             problems.append(f"{reason}（該当: {found.group(0)!r}）")
+    return problems
+
+
+def edit_problems(article: dict) -> list[str]:
+    """管理画面で人が直した記事を公開してよいか。空なら公開できる。
+
+    段落の長さや題材の重なりは LLM の品質管理なので、人の編集には課さない。
+    **禁止表現は人が書いても公開しない。** 架空の試合結果・観客数を載せないという
+    方針は、書き手がAIでも人でも同じだから（docs/admin.md）。
+    """
+    problems: list[str] = []
+    if article.get("category") not in EDIT_CATEGORIES:
+        problems.append(f"カテゴリーが規定外: {article.get('category')!r}")
+    title = str(article.get("title", "")).strip()
+    summary = str(article.get("summary", "")).strip()
+    body = [p for p in (article.get("body") or []) if isinstance(p, str) and p.strip()]
+    if not title:
+        problems.append("タイトルが空です")
+    if not summary:
+        problems.append("要約が空です")
+    if not body:
+        problems.append("本文が空です")
+    problems.extend(banned_problems([title, summary, *body]))
     return problems
 
 
@@ -164,7 +197,7 @@ def build_prompt(date: str, recent_titles: list[str]) -> str:
 
 
 def write_article(date: str, recent_titles: list[str], client=None) -> dict | None:
-    """One Claude API call. Returns a checked article, or None (caller falls back)."""
+    """One OpenAI API call. Returns a checked article, or None (caller falls back)."""
     if not configured():
         print(f"[LLM] skipped: {status()}")
         return None

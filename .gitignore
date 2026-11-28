@@ -10,3 +10,6 @@ secrets/*
 !secrets/README.md
 # 公開用の生成物（publisher が作り直す）
 site/
+# 管理画面の下書き・管理者のパスワードハッシュ・セッション鍵。リポジトリは公開なので
+# 未確認の下書きもハッシュも入れない（docs/admin.md）。
+admin-data/

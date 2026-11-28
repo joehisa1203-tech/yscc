@@ -1,0 +1,371 @@
+"""Drafts: the daily article waits here until an admin presses 公開.
+
+流れ（2026-11-28 に半自動へ変更。設計は docs/admin.md）:
+
+1. scheduler が毎日 PUBLISH_AT に create_for(今日) を呼び、下書きを1本作る
+   （LLM が書く。断られたら手書きローテーション。写真は Drive から1枚）。
+2. 管理画面で確認・編集・写真の差し替えをする。
+3. 「公開」で publish() が posts.json に入れ、ページを作り直して公開ディレクトリへ
+   書き出し、push する。**押されなければ公開しない**（日が過ぎても下書きのまま）。
+4. 公開済みの記事は unpublish() で下書き（status "unpublished"）に戻せる。
+
+下書きは admin-data/ に置く。公開ディレクトリにも git にも入らない。リポジトリは公開
+されているので、git に入れると未確認の記事が GitHub で読めてしまう。
+
+書き込みはすべて lock() の中で行う。scheduler と管理画面は別のコンテナで同じ
+ファイルを書くため、ロックが無いと片方の変更が消える。
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import re
+import shutil
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+
+from . import config, publisher, writer
+
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+PREFIX_RE = re.compile(r"^(\d{4}年\d{2}月\d{2}日のYSCC観戦ノート｜)(.*)$", re.S)
+
+
+class DraftError(Exception):
+    """利用者に見せてよい理由つきの失敗。"""
+
+
+# --- storage ----------------------------------------------------------------
+
+def drafts_file() -> Path:
+    return config.ADMIN_DATA_DIR / "drafts.json"
+
+
+def photo_path(draft_id: str) -> Path:
+    if not ID_RE.match(draft_id):
+        raise DraftError("不正なIDです")
+    return config.ADMIN_DATA_DIR / "photos" / f"{draft_id}.jpg"
+
+
+@contextmanager
+def lock():
+    config.ADMIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(config.ADMIN_DATA_DIR / ".lock", "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def load() -> list[dict]:
+    path = drafts_file()
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8")).get("drafts", [])
+
+
+def save(drafts: list[dict]) -> None:
+    path = drafts_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    drafts = sorted(drafts, key=lambda d: (d["date"], d["id"]), reverse=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"drafts": drafts}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)  # 途中で落ちても壊れたJSONを残さない
+
+
+def load_posts() -> list[dict]:
+    return json.loads(config.POSTS_FILE.read_text(encoding="utf-8")).get("posts", [])
+
+
+def save_posts(posts: list[dict]) -> None:
+    config.POSTS_FILE.write_text(
+        json.dumps({"posts": posts}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def get(draft_id: str) -> dict:
+    for draft in load():
+        if draft["id"] == draft_id:
+            return draft
+    raise DraftError("下書きが見つかりません")
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# --- conversion -------------------------------------------------------------
+
+def split_title(title: str) -> tuple[str, str]:
+    match = PREFIX_RE.match(title)
+    return (match.group(1), match.group(2)) if match else ("", title)
+
+
+def from_post(post: dict, status: str) -> dict:
+    prefix, headline = split_title(str(post.get("title", "")))
+    draft = {key: value for key, value in post.items() if key not in ("title", "url", "hero")}
+    draft.update({"status": status, "titlePrefix": prefix, "headline": headline,
+                  "photo": None, "createdAt": now(), "updatedAt": now()})
+    return draft
+
+
+def to_post(draft: dict) -> dict:
+    """The public form of a draft (without the hero; publish() adds it)."""
+    post = {key: value for key, value in draft.items()
+            if key not in ("status", "titlePrefix", "headline", "photo", "createdAt",
+                           "updatedAt", "note")}
+    post["title"] = draft.get("titlePrefix", "") + draft.get("headline", "")
+    return post
+
+
+def content(draft: dict) -> dict:
+    """The fields edit_problems() judges."""
+    return {"category": draft.get("category"), "title": draft.get("headline", ""),
+            "summary": draft.get("summary", ""), "body": draft.get("body", [])}
+
+
+def problems(draft: dict) -> list[str]:
+    return writer.edit_problems(content(draft))
+
+
+def date_prefix(date: str) -> str:
+    return datetime.strptime(date, "%Y-%m-%d").strftime("%Y年%m月%d日") + "のYSCC観戦ノート｜"
+
+
+def write_content(date: str, recent_titles: list[str]) -> tuple[dict, str]:
+    """LLM の記事、断られたら手書きローテーション。(post, 由来の説明) を返す。"""
+    daily_blog = publisher.load_daily_blog()
+    article = writer.write_article(date, recent_titles)
+    if not article:
+        return daily_blog.rotation_post(date), "AIが書けなかったため、手書きの定型記事です"
+    post = {
+        "id": date + "-daily-football",
+        "date": date,
+        "category": article["category"],
+        "visual": "DAILY",
+        "title": date_prefix(date) + article["title"],
+        "summary": article["summary"],
+        "body": list(article["body"]) + [daily_blog.CLOSING],
+        "sources": [
+            {"label": "JFL公式 試合日程", "url": daily_blog.JFL},
+            {"label": "Y.S.C.C.公式チケット", "url": daily_blog.TICKET},
+        ],
+        "autoGenerated": True,
+        "writer": writer.MODEL,
+    }
+    return post, f"AI（{writer.MODEL}）が書きました"
+
+
+def recent_titles() -> list[str]:
+    titles = [str(p.get("title", "")) for p in load_posts()[:20]]
+    titles += [d.get("titlePrefix", "") + d.get("headline", "") for d in load()[:5]]
+    return titles
+
+
+def photo_on_drafts(drafts: list[dict]) -> set[str]:
+    return {d["photo"]["fileId"] for d in drafts if d.get("photo") and d["photo"].get("fileId")}
+
+
+def new_photo(file_id: str, drive_name: str) -> dict:
+    photo = {"fileId": file_id, "driveName": drive_name, "alt": config.PHOTO_ALT}
+    if config.PHOTO_CREDIT:
+        photo["credit"] = config.PHOTO_CREDIT
+    return photo
+
+
+# --- operations -------------------------------------------------------------
+
+def create_for(date: str) -> dict | None:
+    """その日の下書きを作る。記事か下書きが既にあれば何もしない（None）。"""
+    with lock():
+        drafts = load()
+        if any(p.get("date") == date for p in load_posts()):
+            print(f"[DRAFT] {date} already has a published article")
+            return None
+        if any(d.get("date") == date for d in drafts):
+            print(f"[DRAFT] {date} already has a draft")
+            return None
+        post, note = write_content(date, recent_titles())
+        draft = from_post(post, "draft")
+        draft["note"] = note
+        draft["photo"] = auto_photo(draft["id"], photo_on_drafts(drafts))
+        drafts.append(draft)
+        save(drafts)
+    print(f"[DRAFT] created {draft['id']} ({note}); waiting for 公開 in the admin screen")
+    return draft
+
+
+def auto_photo(draft_id: str, exclude: set[str]) -> dict | None:
+    if not config.drive_configured():
+        print(f"[PHOTO] skipped: {config.drive_status()}")
+        return None
+    try:
+        from . import drive_photos
+        picked = drive_photos.pick_for_draft(exclude)
+        if not picked:
+            return None
+        size = drive_photos.stage(picked["fileId"], photo_path(draft_id))
+    except Exception as error:  # a Drive outage must not stop the text article
+        print(f"[PHOTO] Drive failed, drafting without a photo: {error}")
+        return None
+    print(f"[PHOTO] staged {picked['driveName']} for {draft_id} ({size // 1024} KB)")
+    return new_photo(picked["fileId"], picked["driveName"])
+
+
+def update(draft_id: str, category: str, headline: str, summary: str, body: list[str],
+           alt: str | None = None, credit: str | None = None) -> list[str]:
+    """編集内容を保存し、公開できない理由（空なら公開可）を返す。理由があっても保存はする。"""
+    with lock():
+        drafts = load()
+        draft = next((d for d in drafts if d["id"] == draft_id), None)
+        if draft is None:
+            raise DraftError("下書きが見つかりません")
+        draft.update({"category": category, "headline": headline.strip(),
+                      "summary": summary.strip(),
+                      "body": [p.strip() for p in body if p.strip()],
+                      "updatedAt": now()})
+        if draft.get("photo"):
+            if alt is not None:
+                draft["photo"]["alt"] = alt.strip()
+            if credit is not None:
+                if credit.strip():
+                    draft["photo"]["credit"] = credit.strip()
+                else:
+                    draft["photo"].pop("credit", None)
+        save(drafts)
+        return problems(draft)
+
+
+def regenerate(draft_id: str) -> str:
+    """AIに書き直させる。写真はそのまま。書けなければ下書きを変えずに理由を返す。"""
+    with lock():
+        drafts = load()
+        draft = next((d for d in drafts if d["id"] == draft_id), None)
+        if draft is None:
+            raise DraftError("下書きが見つかりません")
+        titles = recent_titles() + [draft.get("titlePrefix", "") + draft.get("headline", "")]
+        article = writer.write_article(draft["date"], titles)
+        if not article:
+            raise DraftError("AIが書けませんでした（APIの失敗か禁止表現の検出）。下書きは変更していません")
+        daily_blog = publisher.load_daily_blog()
+        draft.update({"category": article["category"], "headline": article["title"],
+                      "titlePrefix": draft.get("titlePrefix") or date_prefix(draft["date"]),
+                      "summary": article["summary"],
+                      "body": list(article["body"]) + [daily_blog.CLOSING],
+                      "writer": writer.MODEL, "note": f"AI（{writer.MODEL}）が書き直しました",
+                      "updatedAt": now()})
+        save(drafts)
+        return article["title"]
+
+
+def set_photo(draft_id: str, file_id: str, drive_name: str) -> None:
+    from . import drive_photos
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", file_id):
+        raise DraftError("不正な写真IDです")
+    with lock():
+        drafts = load()
+        draft = next((d for d in drafts if d["id"] == draft_id), None)
+        if draft is None:
+            raise DraftError("下書きが見つかりません")
+        try:
+            drive_photos.stage(file_id, photo_path(draft_id))
+        except Exception as error:
+            raise DraftError(f"この画像は使えませんでした（{type(error).__name__}）。"
+                             "HEICなど読めない形式の可能性があります") from error
+        old = draft.get("photo") or {}
+        photo = new_photo(file_id, drive_name)
+        if old.get("alt"):
+            photo["alt"] = old["alt"]
+        draft["photo"] = photo
+        draft["updatedAt"] = now()
+        save(drafts)
+
+
+def remove_photo(draft_id: str) -> None:
+    with lock():
+        drafts = load()
+        draft = next((d for d in drafts if d["id"] == draft_id), None)
+        if draft is None:
+            raise DraftError("下書きが見つかりません")
+        draft["photo"] = None
+        draft["updatedAt"] = now()
+        photo_path(draft_id).unlink(missing_ok=True)
+        save(drafts)
+
+
+def publish(draft_id: str) -> dict:
+    """下書きを公開する。禁止表現などがあれば DraftError で止め、何も公開しない。"""
+    with lock():
+        drafts = load()
+        draft = next((d for d in drafts if d["id"] == draft_id), None)
+        if draft is None:
+            raise DraftError("下書きが見つかりません")
+        found = problems(draft)
+        if found:
+            raise DraftError("公開できません: " + " / ".join(found))
+        posts = load_posts()
+        if any(p["id"] == draft["id"] for p in posts):
+            raise DraftError("同じIDの記事がすでに公開されています")
+        post = to_post(draft)
+        photo = draft.get("photo")
+        staged = photo_path(draft_id)
+        if photo and staged.exists():
+            src = f"{config.PHOTO_WEB_DIR}/{draft_id}-hero.jpg"
+            config.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(staged, config.SITE_ROOT / src)
+            hero = {"src": src, "alt": photo.get("alt") or config.PHOTO_ALT}
+            if photo.get("credit"):
+                hero["credit"] = photo["credit"]
+            post["hero"] = hero
+            from . import drive_photos
+            drive_photos.record_published(photo.get("fileId", ""), photo.get("driveName", ""),
+                                          draft["date"], src)
+        posts.insert(0, post)
+        save_posts(posts)
+        save([d for d in drafts if d["id"] != draft_id])
+        staged.unlink(missing_ok=True)
+        result = publisher.rebuild_and_ship(f"content: publish BLUE COURT article {draft_id}")
+    print(f"[PUBLISH] {draft_id} published; {result['git']}")
+    return result
+
+
+def unpublish(post_id: str) -> dict:
+    """公開中の記事を下書き（unpublished）に戻し、サイトから消す。"""
+    if not ID_RE.match(post_id):
+        raise DraftError("不正なIDです")
+    with lock():
+        posts = load_posts()
+        post = next((p for p in posts if p["id"] == post_id), None)
+        if post is None:
+            raise DraftError("公開中の記事が見つかりません")
+        drafts = [d for d in load() if d["id"] != post_id]
+        draft = from_post(post, "unpublished")
+        draft["note"] = "公開後に非公開へ戻した記事です"
+        hero = post.get("hero") or {}
+        src = str(hero.get("src", ""))
+        if src.startswith(config.PHOTO_WEB_DIR + "/"):
+            public_file = config.SITE_ROOT / src
+            if public_file.exists():
+                staged = photo_path(post_id)
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(public_file), staged)
+            from . import drive_photos
+            entry = drive_photos.forget_published(src) or {}
+            draft["photo"] = {"fileId": entry.get("fileId", ""), "driveName": entry.get("driveName", ""),
+                              "alt": hero.get("alt", "")}
+            if hero.get("credit"):
+                draft["photo"]["credit"] = hero["credit"]
+        drafts.append(draft)
+        save(drafts)
+        save_posts([p for p in posts if p["id"] != post_id])
+        result = publisher.rebuild_and_ship(f"content: unpublish BLUE COURT article {post_id}")
+    print(f"[UNPUBLISH] {post_id} moved back to drafts; {result['git']}")
+    return result
+
+
+def create_today() -> dict | None:
+    """scheduler / run_once の入口。"""
+    date = publisher.today_jst()
+    print(f"[RUN] BLUE COURT draft for {date} (JST)")
+    return create_for(date)

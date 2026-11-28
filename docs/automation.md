@@ -2,16 +2,20 @@
 
 ## これは何か
 
-`automation/` は、BLUE COURT の毎日ブログを **Dockerコンテナ1つで** 公開するアプリです。
+`automation/` は、BLUE COURT の毎日ブログの **下書きを作り、管理画面の公開ボタンで公開する** アプリです
+（2026-11-28 に自動公開から半自動へ変更。管理画面と公開の流れは `docs/admin.md`）。
 
-1. その日（JST）の記事を1本用意する
+scheduler が毎日 `PUBLISH_AT` に行うのは 1〜2 まで（`drafts.create_today()`）。3〜4 は公開ボタンを
+押したとき（`drafts.publish()`）だけ行う。
+
+1. その日（JST）の記事を1本、下書きとして用意する（`admin-data/drafts.json`）
    - `OPENAI_API_KEY` があれば **OpenAIが書く**（`automation/app/writer.py`）
    - 無い・失敗した・禁止表現が出た場合は `scripts/daily_blog.py` の手書き24本から選ぶ
-2. Google Drive のフォルダから **まだ使っていない写真を1枚** 取り出し、記事のヒーロー画像にする
-3. 記事ページ・`sitemap.xml` を作り直す
-4. （任意）git commit → push して Render の自動デプロイを起こす
+2. Google Drive のフォルダから **まだ使っていない写真を1枚** 取り出し、下書きに付ける（`admin-data/photos/`）
+3. 公開ボタンで `posts.json` に入れ、記事ページ・`sitemap.xml` を作り直して `/var/www/yscc` へ書き出す
+4. （`GIT_PUSH=1` なら）git commit → push（GitHubは記録用。公開はnginx）
 
-**Driveもgitも未設定で動きます。** その場合は「写真なしの記事を生成してワーキングツリーに置く」まで。
+**DriveもOpenAIも未設定で動きます。** その場合は写真なし・手書きローテーションの下書きになる。
 認証情報が1つ欠けただけでブログが止まらないようにするための設計です。
 
 ## 参考にした実装
@@ -74,7 +78,7 @@ docker compose up -d preview     # http://<このホスト>:8099/（PREVIEW_BIND
 
 **https://yscc.joeai.co.jp/** で公開しています。このVPSのnginxが `/var/www/yscc` を静的配信し、
 TLSは Let's Encrypt（certbot が自動更新）。Render も GitHub Pages も使いません。**pushを待たずに、
-記事ができた時点で公開されます。**
+公開ボタンを押した時点で公開されます。**
 
 ```
 /etc/nginx/sites-available/yscc.joeai.co.jp   ← 本体（certbot が443を追記済み）
@@ -118,8 +122,10 @@ sudo SITE_EXPORT_DIR=/var/www/yscc bash deploy/setup_nginx.sh yscc.joeai.co.jp
   sitemap・robots がここから作られる）。
 
 ```bash
-docker compose up -d --force-recreate scheduler && docker compose run --rm publish
+docker compose up -d --force-recreate scheduler admin
 ```
+
+その後、管理画面の「公開サイトを書き出し直す」で全ページを新しいURLで作り直す。
 
 ## `.env` を変えたときの反映
 
@@ -144,8 +150,9 @@ GitHub Actions（`site-smoke-test.yml`）も同じスクリプトを使います
 
 ```bash
 cp .env.example .env     # 中身の記入は利用者本人が行う
-docker compose run --rm publish        # 今日の記事を1回だけ生成
-docker compose up -d scheduler         # 毎日 PUBLISH_AT(JST) に生成し続ける（常時起動）
+docker compose run --rm publish        # 今日の下書きを1回だけ作る（公開はしない）
+docker compose up -d scheduler         # 毎日 PUBLISH_AT(JST) に下書きを作り続ける（常時起動）
+docker compose up -d admin             # 管理画面（公開ボタン）。docs/admin.md
 docker compose up -d preview           # http://localhost:8099/ で表示確認
 docker compose logs -f scheduler       # 動いているかの確認
 docker compose down                    # 停止
@@ -225,8 +232,10 @@ docker compose run --rm --entrypoint python publish -c "from automation.app impo
 | `LLM_MAX_TOKENS` | `2000` | 1記事あたりの出力上限 |
 | `SITE_BASE_URL` | onrenderのURL | canonical・og:url・sitemap・記事URLの基点 |
 | `PREVIEW_BIND` | `0.0.0.0` | `preview` の待ち受け。`127.0.0.1` で外部非公開 |
-| `PUBLISH_AT` | `10:10` | scheduler が毎日動く **JST** の時刻 |
-| `RUN_AT_START` | `1` | scheduler 起動直後にも1回公開するか |
+| `PUBLISH_AT` | `10:10` | scheduler が毎日下書きを作る **JST** の時刻 |
+| `RUN_AT_START` | `1` | scheduler 起動直後にも今日の下書きを作るか（既にあれば何もしない） |
+| `ADMIN_PORT` | `8102` | 管理画面のホスト側ポート（`127.0.0.1` のみ。nginx の `/admin/` から転送） |
+| `ADMIN_COOKIE_SECURE` | `1` | ログインCookieを https 限定にする。http で手元確認するときだけ `0` |
 | `GIT_PUSH` | `0` | `1` でコミットとpushを行う |
 | `GIT_REMOTE` / `GIT_BRANCH` | `origin` / `main` | pushの宛先 |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | bot | コミットの名義 |
@@ -258,25 +267,27 @@ Dockerfile が `APP_UID` / `APP_GID`（composeが `HOST_UID` / `HOST_GID` から
 同じUIDのユーザーを作っています。
 
 push先は remote `origin`（`joehisa1203-tech/yscc`）です。旧 `softrenzu/ycss` へは push しません
-（push URLを無効化済み）。**Renderは旧リポジトリを見ているため、pushしても公開サイトは更新されません。**
-反映したい場合はRender側の接続先切り替えが必要です（`docs/status.md` の残課題）。
+（push URLを無効化済み）。公開サイトはVPSのnginxが配るので、pushは公開の条件ではない
+（pushが失敗してもサイトは更新済み。管理画面にその旨が出る）。
 
 ## 生成物と置き場所
 
 | パス | 内容 | git |
 |---|---|---|
 | `data/posts.json` | 記事データ。写真は `hero` キー | 追跡する |
-| `data/photos.json` | 使用済みDrive写真の台帳（ファイルID・日付） | 追跡する |
-| `assets/photos/YYYY-MM-DD-hero.jpg` | 書き出した写真 | 追跡する |
+| `data/photos.json` | **公開中の**Drive写真の台帳（ファイルID・日付）。公開時に記録、非公開化で外す | 追跡する |
+| `assets/photos/<記事ID>-hero.jpg` | 公開した写真（2026-11-27 以前は `YYYY-MM-DD-hero.jpg`） | 追跡する |
+| `admin-data/` | 下書き・下書きの写真・管理者のパスワードハッシュ・セッション鍵 | **除外** |
 | `blog/*.html` | 記事ページ | 追跡する |
 | `secrets/` | サービスアカウント鍵 | **除外** |
 | `.env` | 設定値 | **除外** |
 
 ## 既知の注意点
 
-- **公開できるのは「権利を確認した写真」だけです。** Driveに入れた時点で記事に載るので、
+- **公開できるのは「権利を確認した写真」だけです。** Driveに入れた写真は下書きに自動で付くので、
   クラブ公式写真や第三者の写真を無確認で入れないでください（README の運用方針と同じ）。
-- `scripts/daily_blog.py` は同じ日に二重投稿しません。コンテナとGitHub Actionsの両方が動いても記事は1本です。
-  ただし **公開経路を2つ動かし続けない** こと。現状の整理は `docs/status.md` を参照。
+- 下書きは1日1本（`create_for` は記事か下書きがある日は何もしない）。
+  **公開経路は管理画面の公開ボタンだけ**。Actions の `daily_blog.py`（`generate`）は
+  チェックアウト内で検証するだけで、公開もpushもしない。
 - コンテナはリポジトリをバインドマウントして直接書き込みます。`HOST_UID` を合わせないと
   root所有のファイルができ、次のローカル編集とgit操作が失敗します。
